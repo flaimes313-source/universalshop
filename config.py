@@ -1,7 +1,8 @@
 import os
 from dotenv import load_dotenv
 
-# Загружаем переменные окружения из файла .env
+# Загружаем переменные окружения из файла .env (локально)
+# На сервере Amvera переменные берутся из системы
 load_dotenv()
 
 # --- Настройки Telegram ---
@@ -17,6 +18,9 @@ DB_NAME = os.getenv("DB_NAME", "universalshop")
 
 # Формируем строку подключения для SQLAlchemy (asyncpg)
 DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Таймаут подключения к БД в секундах (для нестабильных сетей)
+DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", 30))
 
 # Проверка, что критически важные переменные заданы
 if not BOT_TOKEN:

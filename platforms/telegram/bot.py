@@ -1,10 +1,9 @@
 from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
-
 from config import BOT_TOKEN
 from database.connection import async_session_maker
-from platforms.telegram.handlers import start
+from platforms.telegram.handlers import start, admin
 
 # Middleware для передачи сессии БД в хендлеры
 class DbSessionMiddleware(BaseMiddleware):
@@ -14,10 +13,7 @@ class DbSessionMiddleware(BaseMiddleware):
             return await handler(event, data)
 
 async def start_bot():
-    """
-    Функция запуска бота.
-    Bot и Dispatcher создаются ВНУТРИ этой функции, когда event loop уже работает.
-    """
+    """Функция запуска бота."""
     print("🚀 Запуск Telegram-бота...")
 
     # Создаём бота и диспетчер внутри асинхронной функции
@@ -30,6 +26,7 @@ async def start_bot():
 
     # Регистрируем роутеры
     dp.include_router(start.router)
+    dp.include_router(admin.router)  # <-- Добавили роутер админки
 
     # Запускаем polling
     await dp.start_polling(bot)

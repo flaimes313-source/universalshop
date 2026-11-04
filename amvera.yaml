@@ -4,6 +4,9 @@ meta:
     name: pip
     version: 3.9
 
+build:
+  useCache: false
+
 run:
   persistenceMount: /data
   containerPort: 80

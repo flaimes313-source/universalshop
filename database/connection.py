@@ -1,3 +1,4 @@
+from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from config import DATABASE_URL
 
@@ -11,6 +12,8 @@ async_session_maker = async_sessionmaker(
 )
 
 # Функция-генератор для получения сессии в хендлерах
-async def get_session() -> AsyncSession:
+# Аннотация AsyncGenerator[AsyncSession, None] говорит, что мы возвращаем асинхронный генератор,
+# который выдает объекты AsyncSession.
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:
         yield session

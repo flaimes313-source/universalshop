@@ -16,11 +16,10 @@ DB_PASS = os.getenv("DB_PASS", "")
 DB_NAME = os.getenv("DB_NAME", "universalshop")
 
 # Формируем строку подключения для SQLAlchemy (asyncpg)
-# Формат: postgresql+asyncpg://user:password@host:port/dbname
 DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Проверка, что критически важные переменные заданы
 if not BOT_TOKEN:
-    raise ValueError("Не задан BOT_TOKEN в файле .env")
+    raise ValueError("❌ Не задан BOT_TOKEN в файле .env. Пожалуйста, откройте .env и вставьте токен из @BotFather.")
 if not ADMIN_ID:
-    raise ValueError("Не задан ADMIN_ID в файле .env")
+    raise ValueError("❌ Не задан ADMIN_ID в файле .env. Пожалуйста, укажите ваш Telegram ID.")

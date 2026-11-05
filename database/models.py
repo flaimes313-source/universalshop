@@ -159,7 +159,9 @@ class CartItem(Base):
     variant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("product_variants.id"), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
 
+    # Связи
     cart: Mapped["Cart"] = relationship(back_populates="items")
+    product: Mapped["Product"] = relationship()  # <-- ДОБАВЛЕНА СВЯЗЬ
 
 
 class Order(Base):

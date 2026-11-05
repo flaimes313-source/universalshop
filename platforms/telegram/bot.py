@@ -4,7 +4,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
 from database.connection import async_session_maker
-from platforms.telegram.handlers import start, admin, catalog, cart, checkout
+from platforms.telegram.handlers import start, admin, catalog, cart, checkout, my_orders
 from admin import products
 
 
@@ -37,6 +37,7 @@ async def start_bot():
     dp.include_router(catalog.router)
     dp.include_router(cart.router)
     dp.include_router(checkout.router)
+    dp.include_router(my_orders.router)
 
     # Запускаем polling
     await dp.start_polling(bot)

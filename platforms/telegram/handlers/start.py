@@ -1,4 +1,4 @@
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import CommandStart
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,3 +36,18 @@ async def cmd_start(message: types.Message, session: AsyncSession):
     
     # 6. Отправляем сообщение
     await message.answer(text=text, reply_markup=keyboard, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "main_menu")
+async def back_to_main_menu(callback: types.CallbackQuery, session: AsyncSession):
+    """Возвращает пользователя в главное меню."""
+    welcome_text = await get_setting(session, "welcome_text", "Добро пожаловать!")
+    shop_name = await get_setting(session, "shop_name", "Наш магазин")
+    menu_items = await get_menu_items(session)
+    keyboard = get_main_menu_keyboard(menu_items)
+    
+    text = f"<b>{shop_name}</b>\n\n{welcome_text}"
+    
+    await callback.message.edit_text(text, reply_markup=None)
+    await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()

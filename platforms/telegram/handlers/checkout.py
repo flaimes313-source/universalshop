@@ -187,11 +187,21 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             delivery_amount=data.get('delivery_amount', Decimal("0"))
         )
 
+        # Убираем reply-клавиатуру ("Пропустить") и добавляем inline-кнопку "В меню"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🏠 В главное меню", callback_data="main_menu")]
+        ])
+        
         await callback.message.edit_text(
             f"✅ Заказ #{order.id} успешно оформлен!\n\n"
-            f"Мы свяжемся с вами для подтверждения."
+            f"Мы свяжемся с вами для подтверждения.",
+            reply_markup=keyboard
         )
         await state.clear()
+        
+        # Отправляем отдельное сообщение, чтобы убрать ReplyKeyboardMarkup
+        await callback.message.answer("Возвращаемся в меню...", reply_markup=types.ReplyKeyboardRemove())
+        
     except Exception as e:
         await callback.message.edit_text(f"❌ Ошибка при оформлении заказа: {str(e)}")
         await state.clear()

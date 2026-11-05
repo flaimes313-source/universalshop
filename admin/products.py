@@ -2,11 +2,16 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from decimal import Decimal
 
 from admin.states import AddProductStates
-from admin.keyboards import get_cancel_keyboard, get_skip_keyboard, get_categories_keyboard, get_confirm_keyboard
+from admin.keyboards import (
+    get_cancel_keyboard,
+    get_skip_keyboard,
+    get_categories_keyboard,
+    get_confirm_keyboard
+)
 from database.models import Product, Category, ProductImage
-from decimal import Decimal
 
 router = Router()
 
@@ -215,7 +220,12 @@ async def save_product(callback: types.CallbackQuery, state: FSMContext, session
     
     await session.commit()
     
-    await callback.message.edit_text("✅ Товар успешно добавлен в каталог!")
+    # Проверяем, было ли сообщение с фото, и выбираем правильный метод
+    if callback.message.photo:
+        await callback.message.edit_caption(caption="✅ Товар успешно добавлен в каталог!")
+    else:
+        await callback.message.edit_text("✅ Товар успешно добавлен в каталог!")
+    
     await state.clear()
     await callback.answer()
 

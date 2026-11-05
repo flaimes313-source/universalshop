@@ -4,8 +4,8 @@ from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
 from database.connection import async_session_maker
-from platforms.telegram.handlers import start, admin
-from admin import products  # <-- Импортируем роутер для работы с товарами
+from platforms.telegram.handlers import start, admin, catalog  # <-- Добавлен catalog
+from admin import products
 
 # Middleware для передачи сессии БД в хендлеры
 class DbSessionMiddleware(BaseMiddleware):
@@ -25,14 +25,15 @@ async def start_bot():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Регистрируем middleware
+    # Регистрируем middleware для сообщений и callback-запросов
     dp.message.middleware(DbSessionMiddleware())
     dp.callback_query.middleware(DbSessionMiddleware())
 
-    # Регистрируем роутеры
+    # Регистрируем роутеры (порядок важен: start -> admin -> products -> catalog)
     dp.include_router(start.router)
     dp.include_router(admin.router)
-    dp.include_router(products.router)  # <-- Регистрируем роутер товаров
+    dp.include_router(products.router)
+    dp.include_router(catalog.router)
 
     # Запускаем polling
     await dp.start_polling(bot)

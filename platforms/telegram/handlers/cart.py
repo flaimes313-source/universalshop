@@ -62,8 +62,3 @@ async def cart_clear(callback: types.CallbackQuery, session: AsyncSession):
     await clear_cart(session, callback.from_user.id)
     await callback.message.edit_text("🛒 Корзина очищена.")
     await callback.answer()
-
-@router.callback_query(F.data == "cart_checkout")
-async def cart_checkout(callback: types.CallbackQuery):
-    await callback.message.answer("🚧 Оформление заказа в разработке (следующий этап).")
-    await callback.answer()

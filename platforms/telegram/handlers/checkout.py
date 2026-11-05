@@ -212,5 +212,13 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
 @router.callback_query(CheckoutStates.waiting_for_confirm, F.data == "order_cancel")
 async def cancel_order(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Оформление заказа отменено.")
+    await callback.message.edit_text(
+        "❌ Оформление заказа отменено.",
+        reply_markup=None
+    )
+    # Отправляем отдельное сообщение, чтобы убрать ReplyKeyboardMarkup ("Пропустить")
+    await callback.message.answer(
+        "Возвращаемся в меню...",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
     await callback.answer()

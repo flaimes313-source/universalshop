@@ -8,6 +8,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 from services.cart import get_cart_items, get_cart_total
 from services.orders import create_order
+from services.settings import get_setting, get_menu_items
+from platforms.telegram.keyboards import get_main_menu_keyboard
 from database.models import DeliveryMethod
 
 router = Router()
@@ -145,6 +147,9 @@ async def process_comment(message: types.Message, state: FSMContext, session: As
     comment = None if message.text == "⏩ Пропустить" else message.text
     await state.update_data(comment=comment)
 
+    # Сначала убираем Reply-клавиатуру ("Пропустить")
+    await message.answer("Сохраняю комментарий...", reply_markup=types.ReplyKeyboardRemove())
+
     data = await state.get_data()
 
     # Формируем итоговое сообщение для подтверждения
@@ -187,7 +192,6 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             delivery_amount=data.get('delivery_amount', Decimal("0"))
         )
 
-        # Убираем reply-клавиатуру ("Пропустить") и добавляем inline-кнопку "В меню"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🏠 В главное меню", callback_data="main_menu")]
         ])
@@ -199,9 +203,6 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
         )
         await state.clear()
         
-        # Отправляем отдельное сообщение, чтобы убрать ReplyKeyboardMarkup
-        await callback.message.answer("Возвращаемся в меню...", reply_markup=types.ReplyKeyboardRemove())
-        
     except Exception as e:
         await callback.message.edit_text(f"❌ Ошибка при оформлении заказа: {str(e)}")
         await state.clear()
@@ -210,15 +211,20 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
 
 
 @router.callback_query(CheckoutStates.waiting_for_confirm, F.data == "order_cancel")
-async def cancel_order(callback: types.CallbackQuery, state: FSMContext):
+async def cancel_order(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     await state.clear()
-    await callback.message.edit_text(
-        "❌ Оформление заказа отменено.",
-        reply_markup=None
-    )
-    # Отправляем отдельное сообщение, чтобы убрать ReplyKeyboardMarkup ("Пропустить")
-    await callback.message.answer(
-        "Возвращаемся в меню...",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
+    
+    # Убираем Reply-клавиатуру
+    await callback.message.answer("Возвращаемся в меню...", reply_markup=types.ReplyKeyboardRemove())
+    await callback.message.edit_text("❌ Оформление заказа отменено.", reply_markup=None)
+
+    # Возвращаем в главное меню
+    welcome_text = await get_setting(session, "welcome_text", "Добро пожаловать!")
+    shop_name = await get_setting(session, "shop_name", "Наш магазин")
+    menu_items = await get_menu_items(session)
+    keyboard = get_main_menu_keyboard(menu_items)
+    
+    text = f"<b>{shop_name}</b>\n\n{welcome_text}"
+    await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+    
     await callback.answer()

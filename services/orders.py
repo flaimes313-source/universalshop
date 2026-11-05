@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from database.models import Order, OrderItem, CartItem, Cart
 from services.users import get_user_by_telegram_id
 from decimal import Decimal
@@ -19,7 +20,7 @@ async def create_order(
     if not user:
         raise ValueError("Пользователь не найден")
 
-    # Получаем корзину и её элементы
+    # Получаем корзину и её элементы С ЗАГРУЗКОЙ ТОВАРОВ
     cart_result = await session.execute(
         select(Cart).where(Cart.user_id == user.id)
     )
@@ -28,15 +29,20 @@ async def create_order(
         raise ValueError("Корзина пуста")
 
     items_result = await session.execute(
-        select(CartItem).where(CartItem.cart_id == cart.id)
+        select(CartItem)
+        .where(CartItem.cart_id == cart.id)
+        .options(selectinload(CartItem.product))  # <-- ВАЖНО: загружаем товары
     )
     cart_items = items_result.scalars().all()
     if not cart_items:
         raise ValueError("Корзина пуста")
 
     # Считаем сумму товаров
-    total_amount = sum(item.product.price * item.quantity for item in cart_items if item.product)
-    total_amount = Decimal(total_amount) + delivery_amount
+    total_amount = Decimal("0")
+    for item in cart_items:
+        if item.product:
+            total_amount += item.product.price * item.quantity
+    total_amount += delivery_amount
 
     # Создаем заказ
     order = Order(

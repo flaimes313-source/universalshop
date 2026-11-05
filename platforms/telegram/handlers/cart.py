@@ -17,7 +17,15 @@ async def show_cart(message: types.Message, session: AsyncSession):
         return
     
     total = await get_cart_total(session, message.from_user.id)
+    
+    # Формируем текст сообщения
     text = "🛒 <b>Ваша корзина:</b>\n\n"
+    for item in items:
+        if item.product:
+            item_total = item.product.price * item.quantity
+            text += f"• {item.product.name} — {item.quantity} шт. × {item.product.price} ₽ = {item_total} ₽\n"
+    
+    text += f"\n💰 <b>Итого: {total} ₽</b>"
     
     await message.answer(text, reply_markup=get_cart_keyboard(items))
 
@@ -30,7 +38,14 @@ async def cart_plus(callback: types.CallbackQuery, session: AsyncSession):
     # Обновляем сообщение
     items = await get_cart_items(session, callback.from_user.id)
     if items:
-        await callback.message.edit_reply_markup(reply_markup=get_cart_keyboard(items))
+        total = await get_cart_total(session, callback.from_user.id)
+        text = "🛒 <b>Ваша корзина:</b>\n\n"
+        for item in items:
+            if item.product:
+                item_total = item.product.price * item.quantity
+                text += f"• {item.product.name} — {item.quantity} шт. × {item.product.price} ₽ = {item_total} ₽\n"
+        text += f"\n💰 <b>Итого: {total} ₽</b>"
+        await callback.message.edit_text(text, reply_markup=get_cart_keyboard(items))
     else:
         await callback.message.edit_text("🛒 Корзина пуста.")
     await callback.answer()
@@ -41,7 +56,14 @@ async def cart_minus(callback: types.CallbackQuery, session: AsyncSession):
     await update_quantity(session, item_id, -1)
     items = await get_cart_items(session, callback.from_user.id)
     if items:
-        await callback.message.edit_reply_markup(reply_markup=get_cart_keyboard(items))
+        total = await get_cart_total(session, callback.from_user.id)
+        text = "🛒 <b>Ваша корзина:</b>\n\n"
+        for item in items:
+            if item.product:
+                item_total = item.product.price * item.quantity
+                text += f"• {item.product.name} — {item.quantity} шт. × {item.product.price} ₽ = {item_total} ₽\n"
+        text += f"\n💰 <b>Итого: {total} ₽</b>"
+        await callback.message.edit_text(text, reply_markup=get_cart_keyboard(items))
     else:
         await callback.message.edit_text("🛒 Корзина пуста.")
     await callback.answer()
@@ -52,7 +74,14 @@ async def cart_del(callback: types.CallbackQuery, session: AsyncSession):
     await remove_item(session, item_id)
     items = await get_cart_items(session, callback.from_user.id)
     if items:
-        await callback.message.edit_reply_markup(reply_markup=get_cart_keyboard(items))
+        total = await get_cart_total(session, callback.from_user.id)
+        text = "🛒 <b>Ваша корзина:</b>\n\n"
+        for item in items:
+            if item.product:
+                item_total = item.product.price * item.quantity
+                text += f"• {item.product.name} — {item.quantity} шт. × {item.product.price} ₽ = {item_total} ₽\n"
+        text += f"\n💰 <b>Итого: {total} ₽</b>"
+        await callback.message.edit_text(text, reply_markup=get_cart_keyboard(items))
     else:
         await callback.message.edit_text("🛒 Корзина пуста.")
     await callback.answer()

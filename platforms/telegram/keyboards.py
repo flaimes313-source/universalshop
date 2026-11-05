@@ -1,4 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database.models import MenuItem
 
 def get_main_menu_keyboard(menu_items: list[MenuItem]) -> ReplyKeyboardMarkup:
@@ -27,15 +27,18 @@ def get_main_menu_keyboard(menu_items: list[MenuItem]) -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         input_field_placeholder="Выберите действие..."
     )
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_cart_keyboard(cart_items: list) -> InlineKeyboardMarkup:
     """Клавиатура для управления корзиной."""
     keyboard = []
     for item in cart_items:
+        # Формируем текст кнопки: "Название (кол-во) = сумма ₽"
+        item_total = item.product.price * item.quantity if item.product else 0
+        button_text = f"{item.product.name if item.product else 'Товар'} ({item.quantity} шт.) = {item_total} ₽"
+        
         keyboard.append([
             InlineKeyboardButton(text="➖", callback_data=f"cart_minus_{item.id}"),
-            InlineKeyboardButton(text=f"{item.product.name} ({item.quantity} шт.)", callback_data="noop"),
+            InlineKeyboardButton(text=button_text, callback_data="noop"),
             InlineKeyboardButton(text="➕", callback_data=f"cart_plus_{item.id}"),
             InlineKeyboardButton(text="❌", callback_data=f"cart_del_{item.id}")
         ])

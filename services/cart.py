@@ -2,29 +2,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from database.models import Cart, CartItem, Product
+from services.users import get_user_by_telegram_id
 
-async def get_or_create_cart(session: AsyncSession, user_id: int) -> Cart:
+async def get_or_create_cart(session: AsyncSession, telegram_id: int) -> Cart:
     """Получает корзину пользователя или создает новую."""
+    user = await get_user_by_telegram_id(session, telegram_id)
+    if not user:
+        raise ValueError("Пользователь не найден в БД. Сначала выполните /start.")
+
     result = await session.execute(
-        select(Cart).where(Cart.user_id == user_id).options(selectinload(Cart.items))
+        select(Cart).where(Cart.user_id == user.id).options(selectinload(Cart.items))
     )
     cart = result.scalars().first()
     if not cart:
-        cart = Cart(user_id=user_id)
+        cart = Cart(user_id=user.id)
         session.add(cart)
         await session.commit()
-        # Перезапрашиваем, чтобы загрузить связи
         result = await session.execute(
             select(Cart).where(Cart.id == cart.id).options(selectinload(Cart.items))
         )
         cart = result.scalars().first()
     return cart
 
-async def add_to_cart(session: AsyncSession, user_id: int, product_id: int, quantity: int = 1):
+async def add_to_cart(session: AsyncSession, telegram_id: int, product_id: int, quantity: int = 1):
     """Добавляет товар в корзину или увеличивает количество."""
-    cart = await get_or_create_cart(session, user_id)
+    cart = await get_or_create_cart(session, telegram_id)
     
-    # Ищем, есть ли уже этот товар в корзине
     result = await session.execute(
         select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id)
     )
@@ -38,13 +41,13 @@ async def add_to_cart(session: AsyncSession, user_id: int, product_id: int, quan
     
     await session.commit()
 
-async def get_cart_items(session: AsyncSession, user_id: int) -> list[CartItem]:
+async def get_cart_items(session: AsyncSession, telegram_id: int) -> list[CartItem]:
     """Возвращает список товаров в корзине с данными о товаре."""
-    cart = await get_or_create_cart(session, user_id)
+    cart = await get_or_create_cart(session, telegram_id)
     result = await session.execute(
         select(CartItem)
         .where(CartItem.cart_id == cart.id)
-        .options(selectinload(CartItem.product)) # Загружаем данные товара
+        .options(selectinload(CartItem.product))
     )
     return result.scalars().all()
 
@@ -63,14 +66,14 @@ async def remove_item(session: AsyncSession, cart_item_id: int):
     await session.execute(delete(CartItem).where(CartItem.id == cart_item_id))
     await session.commit()
 
-async def clear_cart(session: AsyncSession, user_id: int):
+async def clear_cart(session: AsyncSession, telegram_id: int):
     """Очищает корзину пользователя."""
-    cart = await get_or_create_cart(session, user_id)
+    cart = await get_or_create_cart(session, telegram_id)
     await session.execute(delete(CartItem).where(CartItem.cart_id == cart.id))
     await session.commit()
 
-async def get_cart_total(session: AsyncSession, user_id: int) -> float:
+async def get_cart_total(session: AsyncSession, telegram_id: int) -> float:
     """Считает итоговую сумму корзины."""
-    items = await get_cart_items(session, user_id)
+    items = await get_cart_items(session, telegram_id)
     total = sum(item.product.price * item.quantity for item in items if item.product)
     return float(total)

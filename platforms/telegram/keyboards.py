@@ -1,14 +1,15 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from database.models import MenuItem
+from config import ADMIN_ID
 
-def get_main_menu_keyboard(menu_items: list[MenuItem]) -> ReplyKeyboardMarkup:
-    """
-    Создает главное меню из списка кнопок, полученных из БД.
-    Кнопки располагаются по 1 в ряд (для лучшего вида при нечетном количестве).
-    """
+def get_main_menu_keyboard(menu_items: list[MenuItem], is_admin: bool = False) -> ReplyKeyboardMarkup:
+    """Создает главное меню из списка кнопок, полученных из БД."""
     keyboard = []
     for item in menu_items:
         keyboard.append([KeyboardButton(text=item.title)])
+
+    if is_admin:
+        keyboard.append([KeyboardButton(text="⚙️ Админ-панель")])
 
     if not keyboard:
         keyboard = [[KeyboardButton(text="Каталог")]]

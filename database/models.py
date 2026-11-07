@@ -51,8 +51,9 @@ class Admin(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
-    role: Mapped[str] = mapped_column(String(50), default="admin")
+    role: Mapped[str] = mapped_column(String(50), default="manager")  # owner, manager
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    added_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)  # ID того, кто добавил
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -172,7 +173,6 @@ class Order(Base):
     customer_name: Mapped[str] = mapped_column(String(255))
     customer_phone: Mapped[str] = mapped_column(String(50))
     
-    # НОВОЕ ПОЛЕ: Название способа доставки (снимок)
     delivery_method_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
     delivery_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -251,7 +251,6 @@ class DeliveryMethod(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    # ИЗМЕНЕНО: теперь цена может быть строкой (например, "По тарифам СДЭК")
     price: Mapped[str] = mapped_column(String(100), default="0")
     free_threshold: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

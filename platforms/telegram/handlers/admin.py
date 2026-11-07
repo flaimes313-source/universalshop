@@ -3,13 +3,14 @@ from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from config import ADMIN_ID
 from admin.menu import get_admin_main_menu
+from services.admins import is_admin
 
 router = Router()
 
 @router.message(Command("admin"))
 async def cmd_admin(message: types.Message, session: AsyncSession):
     """Обработчик команды /admin."""
-    if message.from_user.id != ADMIN_ID:
+    if not await is_admin(session, message.from_user.id):
         await message.answer("⛔ У вас нет доступа к панели администратора.")
         return
 
@@ -22,7 +23,7 @@ async def cmd_admin(message: types.Message, session: AsyncSession):
 @router.message(F.text == "⚙️ Админ-панель")
 async def admin_panel_button(message: types.Message, session: AsyncSession):
     """Обработчик кнопки 'Админ-панель' в главном меню."""
-    if message.from_user.id != ADMIN_ID:
+    if not await is_admin(session, message.from_user.id):
         await message.answer("⛔ У вас нет доступа.")
         return
 

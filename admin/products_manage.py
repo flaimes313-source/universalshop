@@ -18,30 +18,33 @@ async def list_products(callback: types.CallbackQuery, session: AsyncSession):
     products = result.scalars().all()
 
     if not products:
-        await callback.message.edit_text(
-            "📦 Товаров пока нет.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")]
-            ])
-        )
-        await callback.answer()
-        return
-
-    keyboard = []
-    for p in products:
-        status = "✅" if p.is_active else "❌"
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"{status} {p.name} — {p.price} ₽",
-                callback_data=f"admin_prod_view_{p.id}"
-            )
+        text = "📦 Товаров пока нет."
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")]
         ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")])
+    else:
+        keyboard = []
+        for p in products:
+            status = "✅" if p.is_active else "❌"
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"{status} {p.name} — {p.price} ₽",
+                    callback_data=f"admin_prod_view_{p.id}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")])
+        text = "📦 <b>Управление товарами</b>\n\nВыберите товар:"
 
-    await callback.message.edit_text(
-        "📦 <b>Управление товарами</b>\n\nВыберите товар:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
+    # Проверяем, можно ли редактировать сообщение (если оно с фото — edit_text упадёт)
+    if callback.message.text:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    else:
+        await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+
     await callback.answer()
 
 # --- Просмотр товара ---
@@ -85,9 +88,19 @@ async def view_product(callback: types.CallbackQuery, session: AsyncSession):
             caption=text,
             reply_markup=keyboard
         )
-        await callback.message.delete()
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
     else:
-        await callback.message.edit_text(text, reply_markup=keyboard)
+        if callback.message.text:
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        else:
+            await callback.message.answer(text, reply_markup=keyboard)
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
 
     await callback.answer()
 
@@ -104,7 +117,6 @@ async def toggle_product(callback: types.CallbackQuery, session: AsyncSession):
         await session.commit()
         await callback.answer("Статус изменен", show_alert=False)
 
-    # Возвращаемся к списку
     await list_products(callback, session)
 
 # --- Удалить товар ---
@@ -141,7 +153,7 @@ async def edit_product_start(callback: types.CallbackQuery, state: FSMContext):
     """Начинает редактирование товара."""
     product_id = int(callback.data.split("_")[3])
     await state.update_data(edit_product_id=product_id)
-    await callback.message.answer("Введите новое название товара (или нажмите /skip чтобы пропустить):")
+    await callback.message.answer("Введите новое название товара (или /skip чтобы пропустить):")
     await state.set_state(EditProductStates.waiting_for_name)
     await callback.answer()
 

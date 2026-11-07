@@ -2,16 +2,24 @@ from aiogram.fsm.state import State, StatesGroup
 
 class AddProductStates(StatesGroup):
     """Состояния для добавления товара."""
-    waiting_for_name = State()        # Ожидание названия
-    waiting_for_description = State() # Ожидание описания
-    waiting_for_price = State()       # Ожидание цены
-    waiting_for_old_price = State()   # Ожидание старой цены (для скидки)
-    waiting_for_photo = State()       # Ожидание фотографии
-    waiting_for_category = State()    # Выбор категории
-    waiting_for_stock = State()       # Ожидание остатка
-    waiting_for_confirm = State()     # Подтверждение сохранения
+    waiting_for_name = State()
+    waiting_for_description = State()
+    waiting_for_price = State()
+    waiting_for_old_price = State()
+    waiting_for_photo = State()
+    waiting_for_category = State()
+    waiting_for_stock = State()
+    waiting_for_confirm = State()
 
 class CategoryStates(StatesGroup):
     """Состояния для управления категориями."""
-    waiting_for_name = State()        # Ожидание названия новой категории
-    waiting_for_edit_name = State()   # Ожидание нового названия для редактирования
+    waiting_for_name = State()
+    waiting_for_edit_name = State()
+
+class SettingsStates(StatesGroup):
+    """Состояния для изменения настроек магазина."""
+    waiting_for_value = State()
+
+class StatisticsStates(StatesGroup):
+    """Состояния для просмотра статистики."""
+    waiting_for_period = State()

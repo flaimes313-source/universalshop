@@ -189,7 +189,8 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             customer_phone=data['customer_phone'],
             delivery_address=data.get('delivery_address'),
             comment=data.get('comment'),
-            delivery_amount=data.get('delivery_amount', Decimal("0"))
+            delivery_amount=data.get('delivery_amount', Decimal("0")),
+            bot=callback.bot  # <-- Передаем бота для уведомления
         )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[

@@ -3,8 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from database.models import Order, OrderItem, CartItem, Cart
 from services.users import get_user_by_telegram_id
+from services.notifications import notify_admin_new_order
 from decimal import Decimal
-
+from aiogram import Bot
 
 async def create_order(
     session: AsyncSession,
@@ -13,14 +14,15 @@ async def create_order(
     customer_phone: str,
     delivery_address: str | None,
     comment: str | None,
-    delivery_amount: Decimal = Decimal("0")
+    delivery_amount: Decimal = Decimal("0"),
+    bot: Bot | None = None
 ) -> Order:
     """Создает заказ на основе текущей корзины пользователя."""
     user = await get_user_by_telegram_id(session, telegram_id)
     if not user:
         raise ValueError("Пользователь не найден")
 
-    # Получаем корзину и её элементы С ЗАГРУЗКОЙ ТОВАРОВ
+    # Получаем корзину и её элементы с загрузкой товаров
     cart_result = await session.execute(
         select(Cart).where(Cart.user_id == user.id)
     )
@@ -31,7 +33,7 @@ async def create_order(
     items_result = await session.execute(
         select(CartItem)
         .where(CartItem.cart_id == cart.id)
-        .options(selectinload(CartItem.product))  # <-- ВАЖНО: загружаем товары
+        .options(selectinload(CartItem.product))
     )
     cart_items = items_result.scalars().all()
     if not cart_items:
@@ -59,6 +61,7 @@ async def create_order(
     await session.flush()  # Получаем ID заказа
 
     # Переносим товары из корзины в заказ
+    order_items = []
     for item in cart_items:
         if not item.product:
             continue
@@ -70,10 +73,16 @@ async def create_order(
             quantity=item.quantity
         )
         session.add(order_item)
+        order_items.append(order_item)
 
-    # Очищаем корзину (удаляем CartItem)
+    # Очищаем корзину
     for item in cart_items:
         await session.delete(item)
 
     await session.commit()
+
+    # Отправляем уведомление админу
+    if bot:
+        await notify_admin_new_order(bot, order, order_items)
+
     return order

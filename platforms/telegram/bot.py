@@ -5,7 +5,7 @@ from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
 from database.connection import async_session_maker
 from platforms.telegram.handlers import start, admin, catalog, cart, checkout, my_orders, timezone, support
-from admin import products, orders, categories, settings, statistics, delivery, customers, admin_manage, analytics
+from admin import products, orders, categories, settings, statistics, delivery, customers, admin_manage, analytics, products_manage
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -16,10 +16,6 @@ class DbSessionMiddleware(BaseMiddleware):
 
 
 async def start_bot():
-    """
-    Функция запуска бота.
-    Bot и Dispatcher создаются ВНУТРИ этой функции, когда event loop уже работает.
-    """
     print("🚀 Запуск Telegram-бота...")
 
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
@@ -32,11 +28,12 @@ async def start_bot():
     dp.include_router(admin.router)
     dp.include_router(support.router)
     dp.include_router(products.router)
+    dp.include_router(products_manage.router)  # <-- Добавили
     dp.include_router(orders.router)
     dp.include_router(categories.router)
     dp.include_router(settings.router)
     dp.include_router(statistics.router)
-    dp.include_router(analytics.router)  # <-- Добавили
+    dp.include_router(analytics.router)
     dp.include_router(delivery.router)
     dp.include_router(customers.router)
     dp.include_router(admin_manage.router)

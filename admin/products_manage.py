@@ -1,0 +1,201 @@
+from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from decimal import Decimal
+
+from admin.states import EditProductStates
+from database.models import Product, ProductImage, CartItem, OrderItem
+
+router = Router()
+
+# --- Список товаров ---
+@router.callback_query(F.data == "admin_products_manage")
+async def list_products(callback: types.CallbackQuery, session: AsyncSession):
+    """Показывает список всех товаров для управления."""
+    result = await session.execute(select(Product).order_by(Product.id.desc()))
+    products = result.scalars().all()
+
+    if not products:
+        await callback.message.edit_text(
+            "📦 Товаров пока нет.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")]
+            ])
+        )
+        await callback.answer()
+        return
+
+    keyboard = []
+    for p in products:
+        status = "✅" if p.is_active else "❌"
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"{status} {p.name} — {p.price} ₽",
+                callback_data=f"admin_prod_view_{p.id}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")])
+
+    await callback.message.edit_text(
+        "📦 <b>Управление товарами</b>\n\nВыберите товар:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+# --- Просмотр товара ---
+@router.callback_query(F.data.startswith("admin_prod_view_"))
+async def view_product(callback: types.CallbackQuery, session: AsyncSession):
+    """Показывает детали товара и действия."""
+    product_id = int(callback.data.split("_")[3])
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+
+    status = "✅ Активен" if product.is_active else "❌ Скрыт"
+    text = (
+        f"<b>{product.name}</b>\n\n"
+        f"💰 Цена: {product.price} ₽\n"
+        f"📦 Остаток: {product.stock}\n"
+        f"Статус: {status}\n"
+    )
+    if product.description:
+        text += f"\n📝 {product.description[:100]}...\n"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Скрыть/Показать", callback_data=f"admin_prod_toggle_{product.id}")],
+        [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin_prod_edit_{product.id}")],
+        [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"admin_prod_delete_{product.id}")],
+        [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="admin_products_manage")]
+    ])
+
+    # Если есть фото, показываем его
+    img_result = await session.execute(
+        select(ProductImage).where(ProductImage.product_id == product.id).limit(1)
+    )
+    image = img_result.scalars().first()
+
+    if image and image.telegram_file_id:
+        await callback.message.answer_photo(
+            photo=image.telegram_file_id,
+            caption=text,
+            reply_markup=keyboard
+        )
+        await callback.message.delete()
+    else:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+
+    await callback.answer()
+
+# --- Скрыть/Показать ---
+@router.callback_query(F.data.startswith("admin_prod_toggle_"))
+async def toggle_product(callback: types.CallbackQuery, session: AsyncSession):
+    """Скрывает или показывает товар."""
+    product_id = int(callback.data.split("_")[3])
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+
+    if product:
+        product.is_active = not product.is_active
+        await session.commit()
+        await callback.answer("Статус изменен", show_alert=False)
+
+    # Возвращаемся к списку
+    await list_products(callback, session)
+
+# --- Удалить товар ---
+@router.callback_query(F.data.startswith("admin_prod_delete_"))
+async def delete_product(callback: types.CallbackQuery, session: AsyncSession):
+    """Удаляет товар (с проверкой, есть ли он в заказах)."""
+    product_id = int(callback.data.split("_")[3])
+
+    # Проверяем, есть ли товар в заказах
+    order_item_result = await session.execute(
+        select(OrderItem).where(OrderItem.product_id == product_id).limit(1)
+    )
+    if order_item_result.scalars().first():
+        await callback.answer(
+            "❌ Нельзя удалить: товар есть в заказах. Сначала скройте его.",
+            show_alert=True
+        )
+        return
+
+    # Удаляем из корзин
+    await session.execute(delete(CartItem).where(CartItem.product_id == product_id))
+    # Удаляем фото
+    await session.execute(delete(ProductImage).where(ProductImage.product_id == product_id))
+    # Удаляем товар
+    await session.execute(delete(Product).where(Product.id == product_id))
+    await session.commit()
+
+    await callback.answer("✅ Товар удален", show_alert=True)
+    await list_products(callback, session)
+
+# --- Редактирование товара ---
+@router.callback_query(F.data.startswith("admin_prod_edit_"))
+async def edit_product_start(callback: types.CallbackQuery, state: FSMContext):
+    """Начинает редактирование товара."""
+    product_id = int(callback.data.split("_")[3])
+    await state.update_data(edit_product_id=product_id)
+    await callback.message.answer("Введите новое название товара (или нажмите /skip чтобы пропустить):")
+    await state.set_state(EditProductStates.waiting_for_name)
+    await callback.answer()
+
+@router.message(EditProductStates.waiting_for_name)
+async def edit_product_name(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        await state.update_data(edit_name=message.text)
+    else:
+        await state.update_data(edit_name=None)
+    await message.answer("Введите новую цену (или /skip):")
+    await state.set_state(EditProductStates.waiting_for_price)
+
+@router.message(EditProductStates.waiting_for_price)
+async def edit_product_price(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        try:
+            price = Decimal(message.text.replace(",", "."))
+            await state.update_data(edit_price=price)
+        except:
+            await message.answer("❌ Ошибка. Введите число или /skip:")
+            return
+    else:
+        await state.update_data(edit_price=None)
+    await message.answer("Введите новый остаток (или /skip):")
+    await state.set_state(EditProductStates.waiting_for_stock)
+
+@router.message(EditProductStates.waiting_for_stock)
+async def edit_product_stock(message: types.Message, state: FSMContext, session: AsyncSession):
+    if message.text != "/skip":
+        try:
+            stock = int(message.text)
+            await state.update_data(edit_stock=stock)
+        except:
+            await message.answer("❌ Ошибка. Введите целое число или /skip:")
+            return
+    else:
+        await state.update_data(edit_stock=None)
+
+    data = await state.get_data()
+    product_id = data.get("edit_product_id")
+
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+
+    if product:
+        if data.get("edit_name"):
+            product.name = data["edit_name"]
+        if data.get("edit_price"):
+            product.price = data["edit_price"]
+        if data.get("edit_stock") is not None:
+            product.stock = data["edit_stock"]
+        await session.commit()
+        await message.answer("✅ Товар обновлен.")
+    else:
+        await message.answer("❌ Товар не найден.")
+
+    await state.clear()

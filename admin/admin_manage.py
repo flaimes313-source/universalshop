@@ -9,8 +9,9 @@ from database.models import Admin
 router = Router()
 
 class AdminManageStates(StatesGroup):
-    waiting_for_id = State()
+    waiting_for_add_id = State()
 
+# --- Список администраторов ---
 @router.callback_query(F.data == "admin_admins")
 async def list_admins(callback: types.CallbackQuery, session: AsyncSession):
     """Показывает список администраторов (только для владельца)."""
@@ -22,21 +23,30 @@ async def list_admins(callback: types.CallbackQuery, session: AsyncSession):
     admins = result.scalars().all()
     
     text = "👥 <b>Администраторы:</b>\n\n"
+    keyboard = []
+    
     if not admins:
         text += "Пока нет добавленных администраторов.\n"
     else:
         for adm in admins:
             role = "👑 Владелец" if adm.role == "owner" else "👤 Менеджер"
             text += f"• ID: <code>{adm.telegram_id}</code> — {role}\n"
+            # Кнопка удаления для каждого (кроме владельца)
+            if adm.telegram_id != ADMIN_ID:
+                keyboard.append([
+                    types.InlineKeyboardButton(
+                        text=f"🗑 Удалить {adm.telegram_id}",
+                        callback_data=f"admin_del_manager_{adm.telegram_id}"
+                    )
+                ])
     
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="➕ Добавить менеджера", callback_data="admin_add_manager")],
-        [types.InlineKeyboardButton(text="🗑 Удалить менеджера", callback_data="admin_del_manager")],
-        [types.InlineKeyboardButton(text="🔙 Назад в админ-меню", callback_data="admin_back")]
-    ])
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    keyboard.append([types.InlineKeyboardButton(text="➕ Добавить менеджера", callback_data="admin_add_manager")])
+    keyboard.append([types.InlineKeyboardButton(text="🔙 Назад в админ-меню", callback_data="admin_back")])
+    
+    await callback.message.edit_text(text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard))
     await callback.answer()
 
+# --- Добавление менеджера ---
 @router.callback_query(F.data == "admin_add_manager")
 async def add_manager_start(callback: types.CallbackQuery, state: FSMContext):
     """Начинает добавление менеджера."""
@@ -44,10 +54,10 @@ async def add_manager_start(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Нет доступа.", show_alert=True)
         return
     await callback.message.answer("Введите Telegram ID нового менеджера (число):")
-    await state.set_state(AdminManageStates.waiting_for_id)
+    await state.set_state(AdminManageStates.waiting_for_add_id)
     await callback.answer()
 
-@router.message(AdminManageStates.waiting_for_id)
+@router.message(AdminManageStates.waiting_for_add_id)
 async def add_manager_process(message: types.Message, state: FSMContext, session: AsyncSession):
     """Добавляет менеджера по ID."""
     try:
@@ -56,7 +66,6 @@ async def add_manager_process(message: types.Message, state: FSMContext, session
         await message.answer("❌ Ошибка. Введите число (ID).")
         return
 
-    # Проверяем, нет ли уже такого
     result = await session.execute(select(Admin).where(Admin.telegram_id == new_id))
     existing = result.scalars().first()
     if existing:
@@ -70,40 +79,63 @@ async def add_manager_process(message: types.Message, state: FSMContext, session
     
     await message.answer(f"✅ Менеджер с ID {new_id} добавлен.")
     await state.clear()
+    
+    # Возвращаемся к списку
+    await list_admins(message, session) # Не сработает, т.к. list_admins ждет callback. Сделаем отдельно.
+    # Просто отправим сообщение с обновленным списком (упрощенно)
+    result = await session.execute(select(Admin))
+    admins = result.scalars().all()
+    text = "👥 <b>Администраторы:</b>\n\n"
+    keyboard = []
+    for adm in admins:
+        role = "👑 Владелец" if adm.role == "owner" else "👤 Менеджер"
+        text += f"• ID: <code>{adm.telegram_id}</code> — {role}\n"
+        if adm.telegram_id != ADMIN_ID:
+            keyboard.append([
+                types.InlineKeyboardButton(
+                    text=f"🗑 Удалить {adm.telegram_id}",
+                    callback_data=f"admin_del_manager_{adm.telegram_id}"
+                )
+            ])
+    keyboard.append([types.InlineKeyboardButton(text="➕ Добавить менеджера", callback_data="admin_add_manager")])
+    keyboard.append([types.InlineKeyboardButton(text="🔙 Назад в админ-меню", callback_data="admin_back")])
+    await message.answer(text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard))
 
-@router.callback_query(F.data == "admin_del_manager")
-async def del_manager_start(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
-    """Удаляет менеджера по ID."""
+# --- Удаление менеджера (через кнопку) ---
+@router.callback_query(F.data.startswith("admin_del_manager_"))
+async def del_manager_process(callback: types.CallbackQuery, session: AsyncSession):
+    """Удаляет менеджера по ID из callback_data."""
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Нет доступа.", show_alert=True)
         return
 
-    await callback.message.answer("Введите Telegram ID менеджера для удаления:")
-    await state.set_state(AdminManageStates.waiting_for_id)
-    await state.update_data(action="delete")
-    await callback.answer()
-
-@router.message(AdminManageStates.waiting_for_id, F.text)
-async def del_manager_process(message: types.Message, state: FSMContext, session: AsyncSession):
-    """Удаляет менеджера."""
-    data = await state.get_data()
-    if data.get("action") != "delete":
-        # Если это не удаление, то добавление (обработано выше)
-        return
-
-    try:
-        del_id = int(message.text.strip())
-    except ValueError:
-        await message.answer("❌ Ошибка. Введите число (ID).")
-        return
-
+    del_id = int(callback.data.split("_")[3])
+    
     if del_id == ADMIN_ID:
-        await message.answer("❌ Нельзя удалить владельца.")
-        await state.clear()
+        await callback.answer("❌ Нельзя удалить владельца.", show_alert=True)
         return
 
     await session.execute(delete(Admin).where(Admin.telegram_id == del_id))
     await session.commit()
     
-    await message.answer(f"✅ Менеджер с ID {del_id} удален.")
-    await state.clear()
+    await callback.answer(f"✅ Менеджер с ID {del_id} удален.", show_alert=True)
+    
+    # Обновляем список
+    result = await session.execute(select(Admin))
+    admins = result.scalars().all()
+    text = "👥 <b>Администраторы:</b>\n\n"
+    keyboard = []
+    for adm in admins:
+        role = "👑 Владелец" if adm.role == "owner" else "👤 Менеджер"
+        text += f"• ID: <code>{adm.telegram_id}</code> — {role}\n"
+        if adm.telegram_id != ADMIN_ID:
+            keyboard.append([
+                types.InlineKeyboardButton(
+                    text=f"🗑 Удалить {adm.telegram_id}",
+                    callback_data=f"admin_del_manager_{adm.telegram_id}"
+                )
+            ])
+    keyboard.append([types.InlineKeyboardButton(text="➕ Добавить менеджера", callback_data="admin_add_manager")])
+    keyboard.append([types.InlineKeyboardButton(text="🔙 Назад в админ-меню", callback_data="admin_back")])
+    
+    await callback.message.edit_text(text, reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard))

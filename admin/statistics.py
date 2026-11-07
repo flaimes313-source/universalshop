@@ -1,4 +1,5 @@
 from aiogram import Router, types, F
+from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta
@@ -66,7 +67,10 @@ async def show_statistics_menu(callback: types.CallbackQuery):
 async def stats_today(callback: types.CallbackQuery, session: AsyncSession):
     start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     text = await _get_statistics_text(session, start)
-    await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    try:
+        await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    except TelegramBadRequest:
+        pass  # Игнорируем, если сообщение не изменилось
     await callback.answer()
 
 @router.callback_query(F.data == "stats_yesterday")
@@ -74,25 +78,37 @@ async def stats_yesterday(callback: types.CallbackQuery, session: AsyncSession):
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
     text = await _get_statistics_text(session, yesterday_start)
-    await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    try:
+        await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 @router.callback_query(F.data == "stats_7days")
 async def stats_7days(callback: types.CallbackQuery, session: AsyncSession):
     start = datetime.utcnow() - timedelta(days=7)
     text = await _get_statistics_text(session, start)
-    await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    try:
+        await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 @router.callback_query(F.data == "stats_30days")
 async def stats_30days(callback: types.CallbackQuery, session: AsyncSession):
     start = datetime.utcnow() - timedelta(days=30)
     text = await _get_statistics_text(session, start)
-    await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    try:
+        await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    except TelegramBadRequest:
+        pass
     await callback.answer()
 
 @router.callback_query(F.data == "stats_all")
 async def stats_all(callback: types.CallbackQuery, session: AsyncSession):
     text = await _get_statistics_text(session, None)
-    await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    try:
+        await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
+    except TelegramBadRequest:
+        pass
     await callback.answer()

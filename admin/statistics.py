@@ -1,10 +1,10 @@
 from aiogram import Router, types, F
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 
-from database.models import Order, User, Product, OrderItem
+from database.models import Order, User
 from admin.menu import get_admin_main_menu
 
 router = Router()
@@ -22,7 +22,6 @@ def get_statistics_keyboard() -> types.InlineKeyboardMarkup:
 
 async def _get_statistics_text(session: AsyncSession, start_date: datetime = None) -> str:
     """Формирует текст статистики за период."""
-    # Базовый запрос
     query = select(Order)
     if start_date:
         query = query.where(Order.created_at >= start_date)
@@ -38,7 +37,6 @@ async def _get_statistics_text(session: AsyncSession, start_date: datetime = Non
     revenue = sum(o.total_amount for o in paid_orders)
     avg_check = revenue / len(paid_orders) if paid_orders else Decimal("0")
     
-    # Количество новых пользователей (упрощенно — за все время)
     user_query = select(func.count(User.id))
     if start_date:
         user_query = user_query.where(User.created_at >= start_date)
@@ -66,14 +64,14 @@ async def show_statistics_menu(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "stats_today")
 async def stats_today(callback: types.CallbackQuery, session: AsyncSession):
-    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     text = await _get_statistics_text(session, start)
     await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
     await callback.answer()
 
 @router.callback_query(F.data == "stats_yesterday")
 async def stats_yesterday(callback: types.CallbackQuery, session: AsyncSession):
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
     text = await _get_statistics_text(session, yesterday_start)
     await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
@@ -81,14 +79,14 @@ async def stats_yesterday(callback: types.CallbackQuery, session: AsyncSession):
 
 @router.callback_query(F.data == "stats_7days")
 async def stats_7days(callback: types.CallbackQuery, session: AsyncSession):
-    start = datetime.now(timezone.utc) - timedelta(days=7)
+    start = datetime.utcnow() - timedelta(days=7)
     text = await _get_statistics_text(session, start)
     await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
     await callback.answer()
 
 @router.callback_query(F.data == "stats_30days")
 async def stats_30days(callback: types.CallbackQuery, session: AsyncSession):
-    start = datetime.now(timezone.utc) - timedelta(days=30)
+    start = datetime.utcnow() - timedelta(days=30)
     text = await _get_statistics_text(session, start)
     await callback.message.edit_text(text, reply_markup=get_statistics_keyboard())
     await callback.answer()

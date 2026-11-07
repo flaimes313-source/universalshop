@@ -10,7 +10,7 @@ router = Router()
 
 @router.message(F.text == "Каталог")
 async def show_catalog(message: types.Message, session: AsyncSession):
-    """Показывает каталог: список товаров с кнопкой 'В корзину'."""
+    """Показывает каталог: список товаров с кнопками."""
     
     result = await session.execute(select(Product).where(Product.is_active == True))
     products = result.scalars().all()
@@ -20,7 +20,6 @@ async def show_catalog(message: types.Message, session: AsyncSession):
         return
     
     for product in products:
-        # Получаем фото товара
         img_result = await session.execute(
             select(ProductImage).where(ProductImage.product_id == product.id).limit(1)
         )
@@ -34,9 +33,10 @@ async def show_catalog(message: types.Message, session: AsyncSession):
         if product.old_price:
             caption += f"<s>{product.old_price} ₽</s>\n"
         
-        # Кнопка "В корзину"
+        # Кнопки: В корзину + Задать вопрос
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 В корзину", callback_data=f"add_to_cart_{product.id}")]
+            [InlineKeyboardButton(text="🛒 В корзину", callback_data=f"add_to_cart_{product.id}")],
+            [InlineKeyboardButton(text="❓ Задать вопрос", callback_data=f"product_question_{product.id}")]
         ])
         
         if image and image.telegram_file_id:
@@ -51,11 +51,6 @@ async def show_catalog(message: types.Message, session: AsyncSession):
 @router.callback_query(F.data.startswith("add_to_cart_"))
 async def add_product_to_cart(callback: types.CallbackQuery, session: AsyncSession):
     """Добавляет товар в корзину по нажатию кнопки."""
-    # Извлекаем ID товара из callback_data
     product_id = int(callback.data.split("_")[3])
-    
-    # Добавляем товар в корзину
     await add_to_cart(session, callback.from_user.id, product_id, 1)
-    
-    # Показываем всплывающее уведомление
     await callback.answer("✅ Товар добавлен в корзину!", show_alert=False)

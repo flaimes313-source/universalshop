@@ -23,3 +23,8 @@ class SettingsStates(StatesGroup):
 class StatisticsStates(StatesGroup):
     """Состояния для просмотра статистики."""
     waiting_for_period = State()
+
+class DeliveryStates(StatesGroup):
+    """Состояния для управления доставкой."""
+    waiting_for_name = State()
+    waiting_for_price = State()

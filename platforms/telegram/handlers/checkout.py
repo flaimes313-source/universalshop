@@ -210,11 +210,18 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             [InlineKeyboardButton(text="🏠 В главное меню", callback_data="main_menu")]
         ])
         
-        await callback.message.edit_text(
+        text = (
             f"✅ Заказ #{order.id} успешно оформлен!\n\n"
-            f"Мы свяжемся с вами для подтверждения.",
-            reply_markup=keyboard
+            f"Мы свяжемся с вами для подтверждения."
         )
+        
+        # Проверяем, включена ли ручная оплата
+        payment_enabled = await get_setting(session, "payment_manual_enabled", "0")
+        if payment_enabled == "1":
+            details = await get_setting(session, "payment_manual_details", "Реквизиты не указаны.")
+            text += f"\n\n💳 <b>Для оплаты переведите сумму на реквизиты:</b>\n{details}"
+
+        await callback.message.edit_text(text, reply_markup=keyboard)
         await state.clear()
         
     except Exception as e:

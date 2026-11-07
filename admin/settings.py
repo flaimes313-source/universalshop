@@ -14,6 +14,8 @@ SETTINGS_MAP = {
     "welcome_text": "Приветствие",
     "contacts_text": "Контакты",
     "currency": "Валюта (RUB, USD, EUR)",
+    "payment_manual_enabled": "Ручная оплата (вкл/выкл)",
+    "payment_manual_details": "Реквизиты для ручной оплаты",
 }
 
 def get_settings_keyboard() -> types.InlineKeyboardMarkup:

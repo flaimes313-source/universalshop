@@ -23,11 +23,10 @@ ALLOWED_LICENSE_KEYS = [
 # Привязка к токену бота (дополнительная защита)
 # Если список пуст — проверка не выполняется
 ALLOWED_BOT_TOKENS = [
-    # Сюда впишите токены ваших клиентов
-    # "1234567890:AAH...",
+    # "1234567890:AAH...",  # пример
 ]
 
-# --- ПРОВЕРКИ (после определения всех переменных) ---
+# --- ПРОВЕРКИ ОБЯЗАТЕЛЬНЫХ ПЕРЕМЕННЫХ (без лицензии) ---
 
 if not BOT_TOKEN:
     raise ValueError("❌ Не задан BOT_TOKEN в файле .env.")
@@ -37,9 +36,3 @@ if not ADMIN_ID:
 
 if not DATABASE_URL:
     raise ValueError("❌ Не задан DATABASE_URL в файле .env.")
-
-if LICENSE_KEY not in ALLOWED_LICENSE_KEYS:
-    raise ValueError("❌ Неверный или отсутствующий LICENSE_KEY. Обратитесь к разработчику.")
-
-if ALLOWED_BOT_TOKENS and BOT_TOKEN not in ALLOWED_BOT_TOKENS:
-    raise ValueError("❌ Этот BOT_TOKEN не лицензирован. Обратитесь к разработчику.")

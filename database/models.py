@@ -30,6 +30,7 @@ class User(Base):
 
     platform_accounts: Mapped[List["PlatformAccount"]] = relationship(back_populates="user")
     orders: Mapped[List["Order"]] = relationship(back_populates="user")
+    events: Mapped[List["UserEvent"]] = relationship(back_populates="user") # <-- Добавлено
 
 
 class PlatformAccount(Base):
@@ -301,6 +302,9 @@ class UserEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    event_type: Mapped[str] = mapped_column(String(50))  # product_view, add_to_cart, checkout_start, checkout_step_name, checkout_abandon, order_created
+    event_type: Mapped[str] = mapped_column(String(50))
     event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Связь с пользователем
+    user: Mapped["User"] = relationship(back_populates="events") # <-- Добавлено

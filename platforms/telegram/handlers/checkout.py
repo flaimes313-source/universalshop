@@ -29,7 +29,7 @@ def get_delivery_keyboard(delivery_methods: list[DeliveryMethod]) -> InlineKeybo
     keyboard = []
     for method in delivery_methods:
         keyboard.append([InlineKeyboardButton(
-            text=f"{method.name} ({method.price} ₽)",
+            text=f"{method.name} ({method.price})",
             callback_data=f"delivery_{method.id}"
         )])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -81,13 +81,16 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_phone(message: types.Message, state: FSMContext, session: AsyncSession):
     await state.update_data(customer_phone=message.text)
     
-    # Получаем доступные способы доставки из БД
     result = await session.execute(select(DeliveryMethod).where(DeliveryMethod.is_active == True))
     delivery_methods = result.scalars().all()
 
     if not delivery_methods:
-        # Если способов доставки нет, пропускаем этот шаг
-        await state.update_data(delivery_id=None, delivery_address=None, delivery_amount=Decimal("0"))
+        await state.update_data(
+            delivery_id=None, 
+            delivery_address=None, 
+            delivery_amount=Decimal("0"),
+            delivery_method_name=None
+        )
         await message.answer(
             "Шаг 4 из 5: Введите комментарий к заказу (или нажмите 'Пропустить'):",
             reply_markup=get_skip_keyboard()
@@ -112,10 +115,20 @@ async def process_delivery(callback: types.CallbackQuery, state: FSMContext, ses
         await callback.answer("Ошибка выбора доставки", show_alert=True)
         return
 
-    await state.update_data(delivery_id=delivery_id, delivery_amount=method.price)
+    # Парсим цену: если это число, конвертируем, иначе 0
+    try:
+        price = Decimal(method.price.replace(",", "."))
+    except Exception:
+        price = Decimal("0")
 
-    # Если это самовывоз (цена 0), адрес не нужен
-    if method.price == 0:
+    await state.update_data(
+        delivery_id=delivery_id,
+        delivery_method_name=method.name,
+        delivery_amount=price
+    )
+
+    # Если цена 0 или не число (например, "По тарифам СДЭК"), адрес не запрашиваем
+    if price == 0:
         await state.update_data(delivery_address=None)
         await callback.message.answer(
             "Шаг 4 из 5: Введите комментарий к заказу (или нажмите 'Пропустить'):",
@@ -147,12 +160,10 @@ async def process_comment(message: types.Message, state: FSMContext, session: As
     comment = None if message.text == "⏩ Пропустить" else message.text
     await state.update_data(comment=comment)
 
-    # Сначала убираем Reply-клавиатуру ("Пропустить")
     await message.answer("Сохраняю комментарий...", reply_markup=types.ReplyKeyboardRemove())
 
     data = await state.get_data()
 
-    # Формируем итоговое сообщение для подтверждения
     items = await get_cart_items(session, message.from_user.id)
     total = await get_cart_total(session, message.from_user.id)
     delivery_amount = data.get('delivery_amount', Decimal("0"))
@@ -162,7 +173,8 @@ async def process_comment(message: types.Message, state: FSMContext, session: As
         f"<b>Проверьте ваш заказ:</b>\n\n"
         f"👤 Имя: {data['customer_name']}\n"
         f"📞 Телефон: {data['customer_phone']}\n"
-        f"🚚 Доставка: {data.get('delivery_address', 'Самовывоз')}\n"
+        f"🚚 Доставка: {data.get('delivery_method_name', 'Не выбрана')}\n"
+        f"📍 Адрес: {data.get('delivery_address', 'Самовывоз')}\n"
         f"💬 Комментарий: {data.get('comment', 'Нет')}\n\n"
         f"<b>Товары:</b>\n"
     )
@@ -190,7 +202,8 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             delivery_address=data.get('delivery_address'),
             comment=data.get('comment'),
             delivery_amount=data.get('delivery_amount', Decimal("0")),
-            bot=callback.bot  # <-- Передаем бота для уведомления
+            delivery_method_name=data.get('delivery_method_name'),
+            bot=callback.bot
         )
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -215,11 +228,9 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
 async def cancel_order(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     await state.clear()
     
-    # Убираем Reply-клавиатуру
     await callback.message.answer("Возвращаемся в меню...", reply_markup=types.ReplyKeyboardRemove())
     await callback.message.edit_text("❌ Оформление заказа отменено.", reply_markup=None)
 
-    # Возвращаем в главное меню
     welcome_text = await get_setting(session, "welcome_text", "Добро пожаловать!")
     shop_name = await get_setting(session, "shop_name", "Наш магазин")
     menu_items = await get_menu_items(session)

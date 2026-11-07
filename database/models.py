@@ -25,10 +25,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    timezone: Mapped[str] = mapped_column(String(50), default="Europe/Moscow")  # <-- Добавлено
+    timezone: Mapped[str] = mapped_column(String(50), default="Europe/Moscow")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Связи
     platform_accounts: Mapped[List["PlatformAccount"]] = relationship(back_populates="user")
     orders: Mapped[List["Order"]] = relationship(back_populates="user")
 
@@ -39,11 +38,10 @@ class PlatformAccount(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    platform: Mapped[str] = mapped_column(String(50))  # 'telegram', 'vk', 'max'
-    platform_id: Mapped[str] = mapped_column(String(255))  # ID пользователя в конкретной платформе
+    platform: Mapped[str] = mapped_column(String(50))
+    platform_id: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Связи
     user: Mapped["User"] = relationship(back_populates="platform_accounts")
 
 
@@ -53,7 +51,7 @@ class Admin(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
-    role: Mapped[str] = mapped_column(String(50), default="admin")  # owner, admin, manager, operator
+    role: Mapped[str] = mapped_column(String(50), default="admin")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -72,7 +70,6 @@ class Category(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Связи
     products: Mapped[List["Product"]] = relationship(back_populates="category")
 
 
@@ -86,52 +83,48 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
-    # Numeric(10, 2) гарантирует точность до копеек, как требуют в ТЗ (без float!)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     old_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     
-    article: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Артикул
-    stock: Mapped[int] = mapped_column(Integer, default=0)  # Остаток
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # В продаже или нет
-    is_popular: Mapped[bool] = mapped_column(Boolean, default=False)  # Популярность
+    article: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stock: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_popular: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # Связи
     category: Mapped[Optional["Category"]] = relationship(back_populates="products")
     images: Mapped[List["ProductImage"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     variants: Mapped[List["ProductVariant"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
 
 class ProductImage(Base):
-    """Фотографии товаров. Храним отдельно для разных платформ."""
+    """Фотографии товаров."""
     __tablename__ = "product_images"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
-    image_url: Mapped[str] = mapped_column(String(500))  # Ссылка на оригинал или локальный путь
+    image_url: Mapped[str] = mapped_column(String(500))
     telegram_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     vk_attachment_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    # Связи
     product: Mapped["Product"] = relationship(back_populates="images")
 
 
 class ProductVariant(Base):
-    """Варианты товаров (размер, цвет и т.д.)."""
+    """Варианты товаров."""
     __tablename__ = "product_variants"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
-    name: Mapped[str] = mapped_column(String(100))  # Например: "Размер M, Черный"
+    name: Mapped[str] = mapped_column(String(100))
     article: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)  # Если отличается от базовой
+    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     stock: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Связи
     product: Mapped["Product"] = relationship(back_populates="variants")
 
 
@@ -160,7 +153,6 @@ class CartItem(Base):
     variant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("product_variants.id"), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
 
-    # Связи
     cart: Mapped["Cart"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
 
@@ -172,14 +164,17 @@ class Order(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     
-    status: Mapped[str] = mapped_column(String(50), default="new")  # new, pending_payment, paid, processing, shipped, completed, cancelled
+    status: Mapped[str] = mapped_column(String(50), default="new")
     
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     delivery_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     
-    # Данные покупателя (сохраняем на момент заказа, чтобы не зависеть от изменений профиля)
     customer_name: Mapped[str] = mapped_column(String(255))
     customer_phone: Mapped[str] = mapped_column(String(50))
+    
+    # НОВОЕ ПОЛЕ: Название способа доставки (снимок)
+    delivery_method_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     delivery_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     track_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -192,7 +187,7 @@ class Order(Base):
 
 
 class OrderItem(Base):
-    """Товары в заказе. Сохраняем цену и название на момент покупки."""
+    """Товары в заказе."""
     __tablename__ = "order_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -200,8 +195,8 @@ class OrderItem(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     variant_id: Mapped[Optional[int]] = mapped_column(ForeignKey("product_variants.id"), nullable=True)
     
-    product_name: Mapped[str] = mapped_column(String(255))  # Снимок названия
-    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))  # Снимок цены
+    product_name: Mapped[str] = mapped_column(String(255))
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     quantity: Mapped[int] = mapped_column(Integer)
 
     order: Mapped["Order"] = relationship(back_populates="items")
@@ -230,22 +225,22 @@ class Payment(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
-    provider: Mapped[str] = mapped_column(String(50))  # yookassa, manual, crypto
+    provider: Mapped[str] = mapped_column(String(50))
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(10), default="RUB")
-    status: Mapped[str] = mapped_column(String(50), default="pending")  # pending, success, failed
-    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # ID в платежной системе
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class PaymentEvent(Base):
-    """История платёжных уведомлений (вебхуков)."""
+    """История платёжных уведомлений."""
     __tablename__ = "payment_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     payment_id: Mapped[int] = mapped_column(ForeignKey("payments.id"))
     event_type: Mapped[str] = mapped_column(String(100))
-    payload: Mapped[dict] = mapped_column(JSON)  # Сырой JSON от платежной системы
+    payload: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -256,8 +251,9 @@ class DeliveryMethod(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    price: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
-    free_threshold: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)  # Бесплатно от суммы
+    # ИЗМЕНЕНО: теперь цена может быть строкой (например, "По тарифам СДЭК")
+    price: Mapped[str] = mapped_column(String(100), default="0")
+    free_threshold: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -267,22 +263,22 @@ class DeliveryMethod(Base):
 # ==========================================
 
 class ShopSetting(Base):
-    """Глобальные настройки магазина (ключ-значение)."""
+    """Глобальные настройки магазина."""
     __tablename__ = "shop_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    key: Mapped[str] = mapped_column(String(100), unique=True)  # Например: "shop_name", "welcome_text"
-    value: Mapped[str] = mapped_column(Text)  # Значение настройки
+    key: Mapped[str] = mapped_column(String(100), unique=True)
+    value: Mapped[str] = mapped_column(Text)
 
 
 class MenuItem(Base):
-    """Кнопки главного меню. Позволяет менять меню без кода."""
+    """Кнопки главного меню."""
     __tablename__ = "menu_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(100))  # Текст на кнопке
-    action_type: Mapped[str] = mapped_column(String(50))  # catalog, cart, contacts, url, page
-    action_value: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # URL или ID страницы
+    title: Mapped[str] = mapped_column(String(100))
+    action_type: Mapped[str] = mapped_column(String(50))
+    action_value: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -292,5 +288,5 @@ class NotificationTemplate(Base):
     __tablename__ = "notification_templates"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_key: Mapped[str] = mapped_column(String(100), unique=True)  # order_created, payment_success
+    event_key: Mapped[str] = mapped_column(String(100), unique=True)
     text: Mapped[str] = mapped_column(Text)

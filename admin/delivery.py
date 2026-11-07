@@ -17,7 +17,7 @@ def get_delivery_admin_keyboard(methods: list[DeliveryMethod]) -> types.InlineKe
         status = "✅" if m.is_active else "❌"
         keyboard.append([
             types.InlineKeyboardButton(
-                text=f"{status} {m.name} ({m.price} ₽)",
+                text=f"{status} {m.name} ({m.price})",
                 callback_data=f"admin_del_view_{m.id}"
             )
         ])
@@ -58,7 +58,7 @@ async def view_delivery_method(callback: types.CallbackQuery, session: AsyncSess
         
     text = (
         f"🚚 <b>Способ доставки:</b> {method.name}\n"
-        f"💰 Цена: {method.price} ₽\n"
+        f"💰 Цена/Условие: {method.price}\n"
         f"Статус: {'Активен' if method.is_active else 'Скрыт'}"
     )
     await callback.message.edit_text(text, reply_markup=get_delivery_actions_keyboard(method.id))
@@ -74,23 +74,20 @@ async def add_delivery_start(callback: types.CallbackQuery, state: FSMContext):
 @router.message(DeliveryStates.waiting_for_name)
 async def add_delivery_name(message: types.Message, state: FSMContext):
     await state.update_data(del_name=message.text)
-    await message.answer("Введите стоимость доставки в рублях (например, 500 или 0 для бесплатной):")
+    await message.answer("Введите стоимость или условие доставки (например, 500 или 'По тарифам СДЭК'):")
     await state.set_state(DeliveryStates.waiting_for_price)
 
 @router.message(DeliveryStates.waiting_for_price)
 async def add_delivery_price(message: types.Message, state: FSMContext, session: AsyncSession):
-    try:
-        price = Decimal(message.text.replace(",", "."))
-    except:
-        await message.answer("❌ Ошибка. Введите число (например, 500):")
-        return
-        
+    # Теперь принимаем любую строку, а не только число
+    price_str = message.text.strip()
+    
     data = await state.get_data()
-    method = DeliveryMethod(name=data['del_name'], price=price)
+    method = DeliveryMethod(name=data['del_name'], price=price_str)
     session.add(method)
     await session.commit()
     
-    await message.answer(f"✅ Способ доставки '{method.name}' добавлен.")
+    await message.answer(f"✅ Способ доставки '{method.name}' добавлен (условие: {price_str}).")
     await state.clear()
     
     # Возвращаемся к списку

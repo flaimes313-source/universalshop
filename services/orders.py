@@ -15,6 +15,7 @@ async def create_order(
     delivery_address: str | None,
     comment: str | None,
     delivery_amount: Decimal = Decimal("0"),
+    delivery_method_name: str | None = None,  # <-- Новое поле
     bot: Bot | None = None
 ) -> Order:
     """Создает заказ на основе текущей корзины пользователя."""
@@ -22,7 +23,6 @@ async def create_order(
     if not user:
         raise ValueError("Пользователь не найден")
 
-    # Получаем корзину и её элементы с загрузкой товаров
     cart_result = await session.execute(
         select(Cart).where(Cart.user_id == user.id)
     )
@@ -39,14 +39,12 @@ async def create_order(
     if not cart_items:
         raise ValueError("Корзина пуста")
 
-    # Считаем сумму товаров
     total_amount = Decimal("0")
     for item in cart_items:
         if item.product:
             total_amount += item.product.price * item.quantity
     total_amount += delivery_amount
 
-    # Создаем заказ
     order = Order(
         user_id=user.id,
         status="new",
@@ -54,13 +52,13 @@ async def create_order(
         delivery_amount=delivery_amount,
         customer_name=customer_name,
         customer_phone=customer_phone,
+        delivery_method_name=delivery_method_name,  # <-- Сохраняем
         delivery_address=delivery_address,
         comment=comment
     )
     session.add(order)
-    await session.flush()  # Получаем ID заказа
+    await session.flush()
 
-    # Переносим товары из корзины в заказ
     order_items = []
     for item in cart_items:
         if not item.product:
@@ -75,13 +73,11 @@ async def create_order(
         session.add(order_item)
         order_items.append(order_item)
 
-    # Очищаем корзину
     for item in cart_items:
         await session.delete(item)
 
     await session.commit()
 
-    # Отправляем уведомление админу
     if bot:
         await notify_admin_new_order(bot, order, order_items)
 

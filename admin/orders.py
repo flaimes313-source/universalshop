@@ -9,7 +9,6 @@ from admin.menu import get_admin_main_menu
 
 router = Router()
 
-# Словарь для красивого отображения статусов
 STATUS_NAMES = {
     "new": "🆕 Новый",
     "pending_payment": "⏳ Ожидает оплаты",
@@ -39,7 +38,7 @@ def get_order_status_keyboard(order_id: int, current_status: str) -> types.Inlin
     keyboard = []
     for status_key, status_name in STATUS_NAMES.items():
         if status_key == current_status:
-            continue  # Не показываем текущий статус
+            continue
         keyboard.append([
             types.InlineKeyboardButton(
                 text=status_name,
@@ -75,7 +74,7 @@ async def admin_orders_list(callback: types.CallbackQuery, session: AsyncSession
 
 @router.callback_query(F.data == "admin_orders_list")
 async def admin_orders_list_callback(callback: types.CallbackQuery, session: AsyncSession):
-    """Обработчик для кнопки 'Назад к списку' (тот же список)."""
+    """Обработчик для кнопки 'Назад к списку'."""
     await admin_orders_list(callback, session)
 
 
@@ -99,7 +98,8 @@ async def admin_order_view(callback: types.CallbackQuery, session: AsyncSession)
         f"📌 Статус: {status_name}\n\n"
         f"👤 {order.customer_name}\n"
         f"📞 {order.customer_phone}\n"
-        f"🚚 {order.delivery_address or 'Самовывоз'}\n"
+        f"🚚 Доставка: {order.delivery_method_name or 'Не выбрана'}\n"
+        f"📍 Адрес: {order.delivery_address or 'Самовывоз'}\n"
         f"💬 {order.comment or 'Без комментария'}\n\n"
         f"<b>Товары:</b>\n"
     )
@@ -107,7 +107,6 @@ async def admin_order_view(callback: types.CallbackQuery, session: AsyncSession)
         text += f"• {item.product_name} — {item.quantity} шт. × {item.price} ₽\n"
     text += f"\n💰 <b>Итого: {order.total_amount} ₽</b>"
 
-    # Клавиатура: смена статуса + назад
     keyboard = get_order_status_keyboard(order.id, order.status)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
@@ -153,7 +152,6 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
 
     await callback.answer(f"Статус изменён на {STATUS_NAMES.get(new_status, new_status)}", show_alert=True)
     
-    # Возвращаемся к списку
     await admin_orders_list(callback, session)
 
 

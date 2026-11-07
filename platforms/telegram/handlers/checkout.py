@@ -9,6 +9,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from services.cart import get_cart_items, get_cart_total
 from services.orders import create_order
 from services.settings import get_setting, get_menu_items
+from services.analytics import log_event
 from platforms.telegram.keyboards import get_main_menu_keyboard
 from database.models import DeliveryMethod
 
@@ -25,7 +26,6 @@ class CheckoutStates(StatesGroup):
 
 
 def get_delivery_keyboard(delivery_methods: list[DeliveryMethod]) -> InlineKeyboardMarkup:
-    """Клавиатура выбора способа доставки."""
     keyboard = []
     for method in delivery_methods:
         keyboard.append([InlineKeyboardButton(
@@ -36,7 +36,6 @@ def get_delivery_keyboard(delivery_methods: list[DeliveryMethod]) -> InlineKeybo
 
 
 def get_confirm_order_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура подтверждения заказа."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Подтвердить заказ", callback_data="order_confirm")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="order_cancel")]
@@ -44,7 +43,6 @@ def get_confirm_order_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_skip_keyboard() -> ReplyKeyboardMarkup:
-    """Клавиатура с кнопкой пропуска."""
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="⏩ Пропустить")]],
         resize_keyboard=True
@@ -53,11 +51,13 @@ def get_skip_keyboard() -> ReplyKeyboardMarkup:
 
 @router.callback_query(F.data == "cart_checkout")
 async def start_checkout(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
-    """Запускает процесс оформления заказа."""
     items = await get_cart_items(session, callback.from_user.id)
     if not items:
         await callback.answer("Корзина пуста!", show_alert=True)
         return
+
+    # Логируем начало оформления
+    await log_event(session, callback.from_user.id, "checkout_start")
 
     await callback.message.answer(
         "📝 <b>Оформление заказа</b>\n\nШаг 1 из 5: Введите ваше имя:",
@@ -68,8 +68,9 @@ async def start_checkout(callback: types.CallbackQuery, state: FSMContext, sessi
 
 
 @router.message(CheckoutStates.waiting_for_name)
-async def process_name(message: types.Message, state: FSMContext):
+async def process_name(message: types.Message, state: FSMContext, session: AsyncSession):
     await state.update_data(customer_name=message.text)
+    await log_event(session, message.from_user.id, "checkout_step_name")
     await message.answer(
         "Шаг 2 из 5: Введите ваш номер телефона (например +79991234567):",
         reply_markup=types.ReplyKeyboardRemove()
@@ -80,6 +81,7 @@ async def process_name(message: types.Message, state: FSMContext):
 @router.message(CheckoutStates.waiting_for_phone)
 async def process_phone(message: types.Message, state: FSMContext, session: AsyncSession):
     await state.update_data(customer_phone=message.text)
+    await log_event(session, message.from_user.id, "checkout_step_phone")
     
     result = await session.execute(select(DeliveryMethod).where(DeliveryMethod.is_active == True))
     delivery_methods = result.scalars().all()
@@ -115,7 +117,6 @@ async def process_delivery(callback: types.CallbackQuery, state: FSMContext, ses
         await callback.answer("Ошибка выбора доставки", show_alert=True)
         return
 
-    # Парсим цену: если это число, конвертируем, иначе 0
     try:
         price = Decimal(method.price.replace(",", "."))
     except Exception:
@@ -126,8 +127,9 @@ async def process_delivery(callback: types.CallbackQuery, state: FSMContext, ses
         delivery_method_name=method.name,
         delivery_amount=price
     )
+    
+    await log_event(session, callback.from_user.id, "checkout_step_delivery", {"delivery_id": delivery_id, "method_name": method.name})
 
-    # Если цена 0 или не число (например, "По тарифам СДЭК"), адрес не запрашиваем
     if price == 0:
         await state.update_data(delivery_address=None)
         await callback.message.answer(
@@ -146,8 +148,9 @@ async def process_delivery(callback: types.CallbackQuery, state: FSMContext, ses
 
 
 @router.message(CheckoutStates.waiting_for_address)
-async def process_address(message: types.Message, state: FSMContext):
+async def process_address(message: types.Message, state: FSMContext, session: AsyncSession):
     await state.update_data(delivery_address=message.text)
+    await log_event(session, message.from_user.id, "checkout_step_address")
     await message.answer(
         "Шаг 5 из 5: Введите комментарий к заказу (или нажмите 'Пропустить'):",
         reply_markup=get_skip_keyboard()
@@ -159,6 +162,7 @@ async def process_address(message: types.Message, state: FSMContext):
 async def process_comment(message: types.Message, state: FSMContext, session: AsyncSession):
     comment = None if message.text == "⏩ Пропустить" else message.text
     await state.update_data(comment=comment)
+    await log_event(session, message.from_user.id, "checkout_step_comment")
 
     await message.answer("Сохраняю комментарий...", reply_markup=types.ReplyKeyboardRemove())
 
@@ -206,6 +210,8 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             bot=callback.bot
         )
 
+        await log_event(session, callback.from_user.id, "order_created", {"order_id": order.id, "total": float(order.total_amount)})
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🏠 В главное меню", callback_data="main_menu")]
         ])
@@ -215,7 +221,6 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
             f"Мы свяжемся с вами для подтверждения."
         )
         
-        # Проверяем, включена ли ручная оплата
         payment_enabled = await get_setting(session, "payment_manual_enabled", "0")
         if payment_enabled == "1":
             details = await get_setting(session, "payment_manual_details", "Реквизиты не указаны.")
@@ -233,6 +238,7 @@ async def confirm_order(callback: types.CallbackQuery, state: FSMContext, sessio
 
 @router.callback_query(CheckoutStates.waiting_for_confirm, F.data == "order_cancel")
 async def cancel_order(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    await log_event(session, callback.from_user.id, "checkout_abandon")
     await state.clear()
     
     await callback.message.answer("Возвращаемся в меню...", reply_markup=types.ReplyKeyboardRemove())
@@ -241,7 +247,9 @@ async def cancel_order(callback: types.CallbackQuery, state: FSMContext, session
     welcome_text = await get_setting(session, "welcome_text", "Добро пожаловать!")
     shop_name = await get_setting(session, "shop_name", "Наш магазин")
     menu_items = await get_menu_items(session)
-    keyboard = get_main_menu_keyboard(menu_items)
+    from services.admins import is_admin
+    admin_status = await is_admin(session, callback.from_user.id)
+    keyboard = get_main_menu_keyboard(menu_items, admin_status)
     
     text = f"<b>{shop_name}</b>\n\n{welcome_text}"
     await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")

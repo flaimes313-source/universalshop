@@ -51,9 +51,9 @@ class Admin(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
-    role: Mapped[str] = mapped_column(String(50), default="manager")  # owner, manager
+    role: Mapped[str] = mapped_column(String(50), default="manager")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    added_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)  # ID того, кто добавил
+    added_by: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -289,3 +289,18 @@ class NotificationTemplate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_key: Mapped[str] = mapped_column(String(100), unique=True)
     text: Mapped[str] = mapped_column(Text)
+
+
+# ==========================================
+# 6. АНАЛИТИКА
+# ==========================================
+
+class UserEvent(Base):
+    """События пользователей для аналитики."""
+    __tablename__ = "user_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    event_type: Mapped[str] = mapped_column(String(50))  # product_view, add_to_cart, checkout_start, checkout_step_name, checkout_abandon, order_created
+    event_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

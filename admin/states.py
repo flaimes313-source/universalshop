@@ -10,3 +10,8 @@ class AddProductStates(StatesGroup):
     waiting_for_category = State()    # Выбор категории
     waiting_for_stock = State()       # Ожидание остатка
     waiting_for_confirm = State()     # Подтверждение сохранения
+
+class CategoryStates(StatesGroup):
+    """Состояния для управления категориями."""
+    waiting_for_name = State()        # Ожидание названия новой категории
+    waiting_for_edit_name = State()   # Ожидание нового названия для редактирования

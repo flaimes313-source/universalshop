@@ -25,6 +25,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(50), default="Europe/Moscow")  # <-- Добавлено
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Связи
@@ -161,7 +162,7 @@ class CartItem(Base):
 
     # Связи
     cart: Mapped["Cart"] = relationship(back_populates="items")
-    product: Mapped["Product"] = relationship()  # <-- ДОБАВЛЕНА СВЯЗЬ
+    product: Mapped["Product"] = relationship()
 
 
 class Order(Base):

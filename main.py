@@ -6,13 +6,14 @@ from config import LICENSE_KEY, ALLOWED_LICENSE_KEYS
 from database.connection import async_session_maker
 from database.models import UserEvent
 from database.init_db import init_db
+from database.updates.update_v1 import update_v1
 from platforms.telegram.bot import start_bot
 
 
 async def cleanup_old_events(days: int = 30):
     """Фоновая задача: раз в сутки удаляет события старше N дней."""
     while True:
-        await asyncio.sleep(86400)  # Ждём 24 часа
+        await asyncio.sleep(86400)
         cutoff = datetime.utcnow() - timedelta(days=days)
         async with async_session_maker() as session:
             await session.execute(delete(UserEvent).where(UserEvent.created_at < cutoff))
@@ -21,18 +22,21 @@ async def cleanup_old_events(days: int = 30):
 
 
 async def main():
-    """Точка входа с проверкой лицензии, инициализацией БД и запуском фоновой задачи."""
+    """Точка входа с проверкой лицензии, инициализацией БД, миграциями и запуском."""
     if LICENSE_KEY not in ALLOWED_LICENSE_KEYS:
         print("❌ Ошибка: неверный лицензионный ключ. Бот не запущен.")
         return
 
-    # Инициализация БД (создание таблиц и базовых настроек, если их нет)
+    # 1. Инициализация БД (создание таблиц, если их нет)
     await init_db()
 
-    # Запускаем фоновую задачу очистки
+    # 2. Применение миграций (добавление новых колонок в существующие таблицы)
+    await update_v1()
+
+    # 3. Запускаем фоновую задачу очистки
     asyncio.create_task(cleanup_old_events(30))
 
-    # Запускаем бота
+    # 4. Запускаем бота
     await start_bot()
 
 

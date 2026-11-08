@@ -223,10 +223,11 @@ async def save_product(callback: types.CallbackQuery, state: FSMContext, session
     
     await session.commit()
     
-    if callback.message.photo:
-        await callback.message.edit_caption(caption="✅ Товар успешно добавлен в каталог!")
-    else:
+    # Проверяем, есть ли текст в сообщении (если это фото — edit_text упадёт)
+    if callback.message.text:
         await callback.message.edit_text("✅ Товар успешно добавлен в каталог!")
+    else:
+        await callback.message.edit_caption(caption="✅ Товар успешно добавлен в каталог!")
     
     # Убираем Reply-клавиатуру и показываем админ-меню
     await callback.message.answer(
@@ -245,7 +246,13 @@ async def save_product(callback: types.CallbackQuery, state: FSMContext, session
 @router.callback_query(AddProductStates.waiting_for_confirm, F.data == "product_cancel")
 async def cancel_product(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Добавление товара отменено.")
+    
+    # Проверяем, есть ли текст в сообщении (если это фото — edit_text упадёт)
+    if callback.message.text:
+        await callback.message.edit_text("❌ Добавление товара отменено.")
+    else:
+        await callback.message.edit_caption(caption="❌ Добавление товара отменено.")
+    
     await callback.message.answer(
         "Возвращаемся в админ-панель...",
         reply_markup=ReplyKeyboardRemove()

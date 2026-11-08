@@ -12,6 +12,7 @@ router = Router()
 STATUS_NAMES = {
     "new": "🆕 Новый",
     "pending_payment": "⏳ Ожидает оплаты",
+    "pending": "⏳ Ожидает оплаты",  # на случай старых callback
     "paid": "✅ Оплачен",
     "processing": "📦 В обработке",
     "shipped": "🚚 Отправлен",

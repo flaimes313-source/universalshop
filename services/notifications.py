@@ -1,7 +1,7 @@
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import ADMIN_ID
-from database.models import Order
+from database.models import Order, Product
 
 STATUS_NAMES = {
     "new": "🆕 Новый",
@@ -49,3 +49,21 @@ async def notify_admin_new_order(bot: Bot, order: Order, items: list):
         await bot.send_message(chat_id=ADMIN_ID, text=text, reply_markup=keyboard)
     except Exception as e:
         print(f"Ошибка отправки уведомления админу: {e}")
+
+async def notify_admin_low_stock(bot: Bot, product: Product):
+    """Уведомляет админа, что товар закончился (остаток <= 0)."""
+    if not ADMIN_ID:
+        return
+
+    text = (
+        f"⚠️ <b>Товар закончился!</b>\n\n"
+        f"📦 <b>{product.name}</b>\n"
+        f"💰 Цена: {product.price} ₽\n"
+        f"📉 Остаток: {product.stock} шт.\n\n"
+        f"Товар скрыт из каталога (is_active=False).\n"
+        f"Пополните остаток в админ-панели."
+    )
+    try:
+        await bot.send_message(chat_id=ADMIN_ID, text=text)
+    except Exception as e:
+        print(f"Ошибка отправки уведомления о низком остатке: {e}")

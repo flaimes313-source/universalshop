@@ -3,7 +3,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 from database.models import Order, OrderItem, CartItem, Cart, Product
 from services.users import get_user_by_telegram_id
-from services.notifications import notify_admin_new_order
+from services.notifications import notify_admin_new_order, notify_admin_low_stock
 from decimal import Decimal
 from aiogram import Bot
 
@@ -23,7 +23,6 @@ async def create_order(
     if not user:
         raise ValueError("Пользователь не найден")
 
-    # 1. Получаем корзину и её элементы с блокировкой строк товаров
     cart_result = await session.execute(
         select(Cart).where(Cart.user_id == user.id)
     )
@@ -31,31 +30,27 @@ async def create_order(
     if not cart:
         raise ValueError("Корзина пуста")
 
-    # Используем with_for_update() в select(), а не в selectinload
     items_result = await session.execute(
         select(CartItem)
         .where(CartItem.cart_id == cart.id)
         .options(selectinload(CartItem.product))
-        .with_for_update()  # Блокировка строк
+        .with_for_update()
     )
     cart_items = items_result.scalars().all()
     if not cart_items:
         raise ValueError("Корзина пуста")
 
-    # 2. Проверяем остатки и активность
     for item in cart_items:
         if not item.product or not item.product.is_active:
             raise ValueError(f"Товар '{item.product.name if item.product else 'Неизвестный'}' больше не доступен.")
         if item.quantity > item.product.stock:
             raise ValueError(f"Недостаточно товара '{item.product.name}'. Доступно: {item.product.stock}.")
 
-    # 3. Считаем сумму
     total_amount = Decimal("0")
     for item in cart_items:
         total_amount += item.product.price * item.quantity
     total_amount += delivery_amount
 
-    # 4. Создаем заказ
     order = Order(
         user_id=user.id,
         status="new",
@@ -70,19 +65,26 @@ async def create_order(
     session.add(order)
     await session.flush()
 
-    # 5. Переносим товары в заказ и списываем со склада
     order_items = []
     for item in cart_items:
         if not item.product:
             continue
         
-        # Списываем остаток (атомарно)
         new_stock = item.product.stock - item.quantity
         if new_stock < 0:
             raise ValueError(f"Недостаточно товара '{item.product.name}'.")
         
         stmt = update(Product).where(Product.id == item.product_id).values(stock=new_stock)
         await session.execute(stmt)
+        
+        # Если остаток 0 — уведомляем админа и скрываем товар
+        if new_stock <= 0 and bot:
+            item.product.stock = new_stock
+            item.product.is_active = False
+            await session.execute(
+                update(Product).where(Product.id == item.product_id).values(is_active=False)
+            )
+            await notify_admin_low_stock(bot, item.product)
         
         order_item = OrderItem(
             order_id=order.id,
@@ -94,13 +96,11 @@ async def create_order(
         session.add(order_item)
         order_items.append(order_item)
 
-    # 6. Очищаем корзину
     for item in cart_items:
         await session.delete(item)
 
     await session.commit()
 
-    # 7. Уведомляем админа
     if bot:
         await notify_admin_new_order(bot, order, order_items)
 

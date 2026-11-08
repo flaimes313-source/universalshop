@@ -122,7 +122,7 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
     old_status = order.status
     order.status = new_status
 
-    # Записываем в историю (колонки old_status и changed_by уже должны быть в БД)
+    # Записываем в историю
     history = OrderHistory(
         order_id=order.id,
         old_status=old_status,
@@ -132,7 +132,7 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
     session.add(history)
     await session.commit()
 
-    # Уведомляем покупателя
+    # Уведомляем покупателя (используем STATUS_NAMES для перевода)
     user_result = await session.execute(select(User).where(User.id == order.user_id))
     user = user_result.scalars().first()
     if user:

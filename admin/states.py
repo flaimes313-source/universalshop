@@ -35,4 +35,5 @@ class EditProductStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_price = State()
     waiting_for_stock = State()
-    waiting_for_category = State()  # <-- Добавлено
+    waiting_for_category = State()
+    waiting_for_quick_category = State()  # <-- Добавлено

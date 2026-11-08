@@ -71,6 +71,7 @@ async def view_product(callback: types.CallbackQuery, session: AsyncSession):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 Скрыть/Показать", callback_data=f"admin_prod_toggle_{product.id}")],
         [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin_prod_edit_{product.id}")],
+        [InlineKeyboardButton(text="📁 Сменить категорию", callback_data=f"admin_prod_changecat_{product.id}")],  # <-- Новая кнопка
         [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"admin_prod_delete_{product.id}")],
         [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="admin_products_manage")]
     ])
@@ -139,7 +140,87 @@ async def delete_product(callback: types.CallbackQuery, session: AsyncSession):
     await callback.answer("✅ Товар удален", show_alert=True)
     await list_products(callback, session)
 
-# --- Редактирование товара ---
+# --- Быстрая смена категории ---
+@router.callback_query(F.data.startswith("admin_prod_changecat_"))
+async def change_category_start(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Быстрая смена категории товара."""
+    product_id = int(callback.data.split("_")[3])
+    
+    # Получаем товар для проверки
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+    
+    # Получаем все активные категории
+    cat_result = await session.execute(select(Category).where(Category.is_active == True))
+    categories = cat_result.scalars().all()
+
+    if not categories:
+        await callback.answer("Нет доступных категорий.", show_alert=True)
+        return
+
+    # Сохраняем ID товара в состоянии
+    await state.update_data(quick_cat_product_id=product_id)
+    
+    # Показываем список категорий
+    keyboard = []
+    for cat in categories:
+        keyboard.append([InlineKeyboardButton(text=cat.name, callback_data=f"quick_cat_choose_{cat.id}")])
+    keyboard.append([InlineKeyboardButton(text="Без категории", callback_data="quick_cat_choose_none")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"admin_prod_view_{product_id}")])
+
+    await callback.message.edit_text(
+        f"📁 <b>Смена категории для товара:</b> {product.name}\n\nВыберите новую категорию:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await state.set_state(EditProductStates.waiting_for_quick_category)
+    await callback.answer()
+
+@router.callback_query(EditProductStates.waiting_for_quick_category, F.data.startswith("quick_cat_choose_"))
+async def change_category_choose(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    """Применяет новую категорию к товару."""
+    cat_data = callback.data.replace("quick_cat_choose_", "")
+    
+    if cat_data == "none":
+        new_category_id = None
+    else:
+        new_category_id = int(cat_data)
+
+    data = await state.get_data()
+    product_id = data.get("quick_cat_product_id")
+    
+    if not product_id:
+        await callback.answer("Ошибка: товар не найден в состоянии", show_alert=True)
+        await state.clear()
+        return
+
+    result = await session.execute(select(Product).where(Product.id == product_id))
+    product = result.scalars().first()
+    
+    if product:
+        product.category_id = new_category_id
+        await session.commit()
+        await callback.answer("✅ Категория изменена", show_alert=True)
+        
+        # Возвращаемся к карточке товара
+        # Создаем фейковый callback для view_product
+        class FakeCallback:
+            def __init__(self, original):
+                self.message = original.message
+                self.from_user = original.from_user
+                self.data = f"admin_prod_view_{product_id}"
+                self.id = original.id
+                self.bot = original.bot
+        
+        await view_product(FakeCallback(callback), session)
+    else:
+        await callback.answer("❌ Товар не найден", show_alert=True)
+    
+    await state.clear()
+
+# --- Редактирование товара (старый функционал) ---
 @router.callback_query(F.data.startswith("admin_prod_edit_"))
 async def edit_product_start(callback: types.CallbackQuery, state: FSMContext):
     product_id = int(callback.data.split("_")[3])
@@ -200,7 +281,6 @@ async def edit_category_start(callback: types.CallbackQuery, state: FSMContext, 
 
     if not categories:
         await callback.message.answer("Нет доступных категорий.")
-        # Завершаем редактирование без смены категории
         await finish_edit(callback.message, state, session, new_category_id=None)
         await callback.answer()
         return

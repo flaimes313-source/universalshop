@@ -170,7 +170,6 @@ async def change_category_start(callback: types.CallbackQuery, state: FSMContext
     text = f"📁 <b>Смена категории для товара:</b> {product.name}\n\nВыберите новую категорию:"
     markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-    # Проверяем, можно ли редактировать сообщение (если это фото — edit_text упадёт)
     if callback.message.text:
         await callback.message.edit_text(text, reply_markup=markup)
     else:
@@ -209,7 +208,7 @@ async def change_category_choose(callback: types.CallbackQuery, state: FSMContex
         await session.commit()
         await callback.answer("✅ Категория изменена", show_alert=True)
         
-        # Возвращаемся к карточке товара
+        # Возвращаемся к карточке товара (создаем "фейковый" callback с нужными методами)
         class FakeCallback:
             def __init__(self, original):
                 self.message = original.message
@@ -217,6 +216,9 @@ async def change_category_choose(callback: types.CallbackQuery, state: FSMContex
                 self.data = f"admin_prod_view_{product_id}"
                 self.id = original.id
                 self.bot = original.bot
+            
+            async def answer(self, text=None, show_alert=False):
+                pass
         
         await view_product(FakeCallback(callback), session)
     else:

@@ -3,14 +3,25 @@ from database.models import MenuItem
 from config import ADMIN_ID
 
 def get_main_menu_keyboard(menu_items: list[MenuItem], is_admin: bool = False) -> ReplyKeyboardMarkup:
-    """Создает главное меню из списка кнопок, полученных из БД."""
+    """Создает главное меню из списка кнопок, полученных из БД (по 2 в ряд)."""
     keyboard = []
+    row = []
+    
     for item in menu_items:
-        keyboard.append([KeyboardButton(text=item.title)])
-
+        row.append(KeyboardButton(text=item.title))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    
     if is_admin:
-        keyboard.append([KeyboardButton(text="⚙️ Админ-панель")])
-
+        row.append(KeyboardButton(text="⚙️ Админ-панель"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    
+    if row:
+        keyboard.append(row)
+    
     if not keyboard:
         keyboard = [[KeyboardButton(text="Каталог")]]
 

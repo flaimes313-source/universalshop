@@ -53,7 +53,16 @@ async def update_v1():
             ))
             print("  + Добавлена колонка order_history.changed_by")
         
-        # 5. Добавляем requires_address в delivery_methods (если нет)
+        # 5. Удаляем старую колонку status из order_history (если есть)
+        result = await conn.execute(text("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='order_history' AND column_name='status'
+        """))
+        if result.scalars().first():
+            await conn.execute(text("ALTER TABLE order_history DROP COLUMN status"))
+            print("  + Удалена устаревшая колонка order_history.status")
+        
+        # 6. Добавляем requires_address в delivery_methods (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='requires_address'
@@ -64,7 +73,7 @@ async def update_v1():
             ))
             print("  + Добавлена колонка delivery_methods.requires_address")
         
-        # 6. Добавляем is_free в delivery_methods (если нет)
+        # 7. Добавляем is_free в delivery_methods (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='is_free'
@@ -75,7 +84,7 @@ async def update_v1():
             ))
             print("  + Добавлена колонка delivery_methods.is_free")
         
-        # 7. Меняем тип price в delivery_methods на NUMERIC (если нужно)
+        # 8. Меняем тип price в delivery_methods на NUMERIC (если нужно)
         result = await conn.execute(text("""
             SELECT data_type FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='price'
@@ -93,7 +102,7 @@ async def update_v1():
             ))
             print("  + Изменен тип delivery_methods.price на NUMERIC")
         
-        # 8. Добавляем delivery_method_name в orders (если нет)
+        # 9. Добавляем delivery_method_name в orders (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='orders' AND column_name='delivery_method_name'

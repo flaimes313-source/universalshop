@@ -122,7 +122,7 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
     old_status = order.status
     order.status = new_status
 
-    # Записываем в историю
+    # Записываем в историю (колонки old_status и changed_by уже должны быть в БД)
     history = OrderHistory(
         order_id=order.id,
         old_status=old_status,

@@ -27,7 +27,6 @@ async def get_or_create_cart(session: AsyncSession, telegram_id: int) -> Cart:
 
 async def add_to_cart(session: AsyncSession, telegram_id: int, product_id: int, quantity: int = 1):
     """Добавляет товар в корзину или увеличивает количество с проверкой остатков."""
-    # 1. Проверяем товар
     product_result = await session.execute(select(Product).where(Product.id == product_id))
     product = product_result.scalars().first()
     if not product:
@@ -39,14 +38,14 @@ async def add_to_cart(session: AsyncSession, telegram_id: int, product_id: int, 
 
     cart = await get_or_create_cart(session, telegram_id)
     
-    # 2. Ищем, есть ли уже этот товар в корзине
     result = await session.execute(
-        select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product_id)
+        select(CartItem)
+        .where(CartItem.cart_id == cart.id, CartItem.product_id == product_id)
+        .options(selectinload(CartItem.product))  # <-- ВАЖНО
     )
     item = result.scalars().first()
     
     if item:
-        # Проверяем, что суммарное количество не превышает остаток
         if item.quantity + quantity > product.stock:
             raise ValueError(f"Недостаточно товара. В корзине уже {item.quantity} шт., на складе {product.stock}.")
         item.quantity += quantity
@@ -68,7 +67,6 @@ async def get_cart_items(session: AsyncSession, telegram_id: int) -> list[CartIt
 
 async def update_quantity(session: AsyncSession, telegram_id: int, cart_item_id: int, delta: int):
     """Изменяет количество товара с проверкой принадлежности и остатков."""
-    # 1. Проверяем, что элемент принадлежит корзине пользователя
     user = await get_user_by_telegram_id(session, telegram_id)
     if not user:
         raise ValueError("Пользователь не найден.")
@@ -76,13 +74,14 @@ async def update_quantity(session: AsyncSession, telegram_id: int, cart_item_id:
     cart = await get_or_create_cart(session, telegram_id)
     
     result = await session.execute(
-        select(CartItem).where(CartItem.id == cart_item_id, CartItem.cart_id == cart.id)
+        select(CartItem)
+        .where(CartItem.id == cart_item_id, CartItem.cart_id == cart.id)
+        .options(selectinload(CartItem.product))  # <-- ВАЖНО
     )
     item = result.scalars().first()
     if not item:
         raise ValueError("Элемент не найден в вашей корзине.")
 
-    # 2. Проверяем остаток
     if delta > 0:
         if item.quantity + delta > item.product.stock:
             raise ValueError(f"Недостаточно товара. Доступно: {item.product.stock}.")

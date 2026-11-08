@@ -28,10 +28,11 @@ class DeliveryStates(StatesGroup):
     """Состояния для управления доставкой."""
     waiting_for_name = State()
     waiting_for_price = State()
-    waiting_for_requires_address = State()  # <-- добавлено
+    waiting_for_requires_address = State()
 
 class EditProductStates(StatesGroup):
     """Состояния для редактирования товара."""
     waiting_for_name = State()
     waiting_for_price = State()
     waiting_for_stock = State()
+    waiting_for_category = State()  # <-- Добавлено

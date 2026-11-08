@@ -6,7 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from decimal import Decimal
 
 from admin.states import EditProductStates
-from database.models import Product, ProductImage, CartItem, OrderItem
+from database.models import Product, ProductImage, CartItem, OrderItem, Category
 
 router = Router()
 
@@ -35,7 +35,6 @@ async def list_products(callback: types.CallbackQuery, session: AsyncSession):
         keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")])
         text = "📦 <b>Управление товарами</b>\n\nВыберите товар:"
 
-    # Проверяем, можно ли редактировать сообщение (если оно с фото — edit_text упадёт)
     if callback.message.text:
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
     else:
@@ -76,7 +75,6 @@ async def view_product(callback: types.CallbackQuery, session: AsyncSession):
         [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="admin_products_manage")]
     ])
 
-    # Если есть фото, показываем его
     img_result = await session.execute(
         select(ProductImage).where(ProductImage.product_id == product.id).limit(1)
     )
@@ -107,7 +105,6 @@ async def view_product(callback: types.CallbackQuery, session: AsyncSession):
 # --- Скрыть/Показать ---
 @router.callback_query(F.data.startswith("admin_prod_toggle_"))
 async def toggle_product(callback: types.CallbackQuery, session: AsyncSession):
-    """Скрывает или показывает товар."""
     product_id = int(callback.data.split("_")[3])
     result = await session.execute(select(Product).where(Product.id == product_id))
     product = result.scalars().first()
@@ -122,10 +119,8 @@ async def toggle_product(callback: types.CallbackQuery, session: AsyncSession):
 # --- Удалить товар ---
 @router.callback_query(F.data.startswith("admin_prod_delete_"))
 async def delete_product(callback: types.CallbackQuery, session: AsyncSession):
-    """Удаляет товар (с проверкой, есть ли он в заказах)."""
     product_id = int(callback.data.split("_")[3])
 
-    # Проверяем, есть ли товар в заказах
     order_item_result = await session.execute(
         select(OrderItem).where(OrderItem.product_id == product_id).limit(1)
     )
@@ -136,11 +131,8 @@ async def delete_product(callback: types.CallbackQuery, session: AsyncSession):
         )
         return
 
-    # Удаляем из корзин
     await session.execute(delete(CartItem).where(CartItem.product_id == product_id))
-    # Удаляем фото
     await session.execute(delete(ProductImage).where(ProductImage.product_id == product_id))
-    # Удаляем товар
     await session.execute(delete(Product).where(Product.id == product_id))
     await session.commit()
 
@@ -150,7 +142,6 @@ async def delete_product(callback: types.CallbackQuery, session: AsyncSession):
 # --- Редактирование товара ---
 @router.callback_query(F.data.startswith("admin_prod_edit_"))
 async def edit_product_start(callback: types.CallbackQuery, state: FSMContext):
-    """Начинает редактирование товара."""
     product_id = int(callback.data.split("_")[3])
     await state.update_data(edit_product_id=product_id)
     await callback.message.answer("Введите новое название товара (или /skip чтобы пропустить):")
@@ -192,6 +183,57 @@ async def edit_product_stock(message: types.Message, state: FSMContext, session:
     else:
         await state.update_data(edit_stock=None)
 
+    # Спрашиваем, хочет ли пользователь изменить категорию
+    await message.answer(
+        "Хотите изменить категорию товара?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Да, изменить", callback_data="edit_cat_yes")],
+            [InlineKeyboardButton(text="Нет, оставить", callback_data="edit_cat_no")]
+        ])
+    )
+    await state.set_state(EditProductStates.waiting_for_category)
+
+@router.callback_query(EditProductStates.waiting_for_category, F.data == "edit_cat_yes")
+async def edit_category_start(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    result = await session.execute(select(Category).where(Category.is_active == True))
+    categories = result.scalars().all()
+
+    if not categories:
+        await callback.message.answer("Нет доступных категорий.")
+        # Завершаем редактирование без смены категории
+        await finish_edit(callback.message, state, session, new_category_id=None)
+        await callback.answer()
+        return
+
+    keyboard = []
+    for cat in categories:
+        keyboard.append([InlineKeyboardButton(text=cat.name, callback_data=f"edit_cat_choose_{cat.id}")])
+    keyboard.append([InlineKeyboardButton(text="Без категории", callback_data="edit_cat_choose_none")])
+
+    await callback.message.answer(
+        "Выберите новую категорию:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+@router.callback_query(EditProductStates.waiting_for_category, F.data == "edit_cat_no")
+async def edit_category_no(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    await finish_edit(callback.message, state, session, new_category_id=None)
+    await callback.answer()
+
+@router.callback_query(EditProductStates.waiting_for_category, F.data.startswith("edit_cat_choose_"))
+async def edit_category_choose(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    cat_data = callback.data.replace("edit_cat_choose_", "")
+    if cat_data == "none":
+        new_category_id = None
+    else:
+        new_category_id = int(cat_data)
+
+    await finish_edit(callback.message, state, session, new_category_id=new_category_id)
+    await callback.answer()
+
+async def finish_edit(message: types.Message, state: FSMContext, session: AsyncSession, new_category_id: int = None):
+    """Завершает редактирование товара, сохраняя изменения."""
     data = await state.get_data()
     product_id = data.get("edit_product_id")
 
@@ -205,6 +247,8 @@ async def edit_product_stock(message: types.Message, state: FSMContext, session:
             product.price = data["edit_price"]
         if data.get("edit_stock") is not None:
             product.stock = data["edit_stock"]
+        if new_category_id is not None:
+            product.category_id = new_category_id
         await session.commit()
         await message.answer("✅ Товар обновлен.")
     else:

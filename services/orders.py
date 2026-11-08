@@ -23,7 +23,7 @@ async def create_order(
     if not user:
         raise ValueError("Пользователь не найден")
 
-    # 1. Получаем корзину и её элементы с блокировкой строк товаров (FOR UPDATE)
+    # 1. Получаем корзину и её элементы с блокировкой строк товаров
     cart_result = await session.execute(
         select(Cart).where(Cart.user_id == user.id)
     )
@@ -31,10 +31,12 @@ async def create_order(
     if not cart:
         raise ValueError("Корзина пуста")
 
+    # Используем with_for_update() в select(), а не в selectinload
     items_result = await session.execute(
         select(CartItem)
         .where(CartItem.cart_id == cart.id)
-        .options(selectinload(CartItem.product).with_for_update())  # Блокировка!
+        .options(selectinload(CartItem.product))
+        .with_for_update()  # Блокировка строк
     )
     cart_items = items_result.scalars().all()
     if not cart_items:

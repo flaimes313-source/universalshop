@@ -15,7 +15,7 @@ def get_delivery_admin_keyboard(methods: list[DeliveryMethod]) -> InlineKeyboard
     keyboard = []
     for m in methods:
         status = "✅" if m.is_active else "❌"
-        price_str = f"{m.price} ₽" if m.price else "Бесплатно"
+        price_str = f"{m.price} ₽" if m.price else (m.description or "Бесплатно")
         keyboard.append([
             InlineKeyboardButton(
                 text=f"{status} {m.name} ({price_str})",
@@ -61,6 +61,8 @@ async def view_delivery_method(callback: types.CallbackQuery, session: AsyncSess
         f"🆓 Бесплатная: {'Да' if method.is_free else 'Нет'}\n"
         f"Статус: {'Активен' if method.is_active else 'Скрыт'}"
     )
+    if method.description:
+        text += f"\n📝 {method.description}"
     await callback.message.edit_text(text, reply_markup=get_delivery_actions_keyboard(method.id))
     await callback.answer()
 
@@ -73,19 +75,21 @@ async def add_delivery_start(callback: types.CallbackQuery, state: FSMContext):
 @router.message(DeliveryStates.waiting_for_name)
 async def add_delivery_name(message: types.Message, state: FSMContext):
     await state.update_data(del_name=message.text)
-    await message.answer("Введите стоимость доставки в рублях (например, 500 или 0 для бесплатной):")
+    await message.answer("Введите стоимость доставки (число, например 500, или текст, например 'По тарифам СДЭК'):")
     await state.set_state(DeliveryStates.waiting_for_price)
 
 @router.message(DeliveryStates.waiting_for_price)
 async def add_delivery_price(message: types.Message, state: FSMContext, session: AsyncSession):
+    text = message.text.strip()
     try:
-        price = Decimal(message.text.replace(",", "."))
+        price = Decimal(text.replace(",", "."))
+        description = None
     except:
-        await message.answer("❌ Ошибка. Введите число (например, 500 или 0):")
-        return
+        price = Decimal("0")
+        description = text  # Если это текст, сохраняем в описание
     
-    # Спрашиваем, нужен ли адрес
-    await state.update_data(del_price=price)
+    await state.update_data(del_price=price, del_description=description)
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Да (курьер)", callback_data="del_requires_yes")],
         [InlineKeyboardButton(text="Нет (самовывоз)", callback_data="del_requires_no")],
@@ -101,6 +105,7 @@ async def add_delivery_requires_address(callback: types.CallbackQuery, state: FS
     method = DeliveryMethod(
         name=data['del_name'],
         price=data['del_price'],
+        description=data.get('del_description'),
         requires_address=requires,
         is_free=(data['del_price'] == 0)
     )
@@ -110,7 +115,6 @@ async def add_delivery_requires_address(callback: types.CallbackQuery, state: FS
     await callback.message.answer(f"✅ Способ доставки '{method.name}' добавлен.")
     await state.clear()
     
-    # Возвращаемся к списку
     result = await session.execute(select(DeliveryMethod).order_by(DeliveryMethod.sort_order))
     methods = result.scalars().all()
     await callback.message.answer(

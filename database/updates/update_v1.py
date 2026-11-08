@@ -31,7 +31,18 @@ async def update_v1():
             ))
             print("  + Добавлена колонка order_history.old_status")
         
-        # 3. Добавляем changed_by в order_history (если нет)
+        # 3. Добавляем new_status в order_history (если нет)
+        result = await conn.execute(text("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='order_history' AND column_name='new_status'
+        """))
+        if not result.scalars().first():
+            await conn.execute(text(
+                "ALTER TABLE order_history ADD COLUMN new_status VARCHAR(50)"
+            ))
+            print("  + Добавлена колонка order_history.new_status")
+        
+        # 4. Добавляем changed_by в order_history (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='order_history' AND column_name='changed_by'
@@ -42,7 +53,7 @@ async def update_v1():
             ))
             print("  + Добавлена колонка order_history.changed_by")
         
-        # 4. Добавляем requires_address в delivery_methods (если нет)
+        # 5. Добавляем requires_address в delivery_methods (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='requires_address'
@@ -53,7 +64,7 @@ async def update_v1():
             ))
             print("  + Добавлена колонка delivery_methods.requires_address")
         
-        # 5. Добавляем is_free в delivery_methods (если нет)
+        # 6. Добавляем is_free в delivery_methods (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='is_free'
@@ -64,15 +75,13 @@ async def update_v1():
             ))
             print("  + Добавлена колонка delivery_methods.is_free")
         
-        # 6. Меняем тип price в delivery_methods на NUMERIC (если нужно)
-        # Проверяем текущий тип
+        # 7. Меняем тип price в delivery_methods на NUMERIC (если нужно)
         result = await conn.execute(text("""
             SELECT data_type FROM information_schema.columns 
             WHERE table_name='delivery_methods' AND column_name='price'
         """))
         current_type = result.scalars().first()
         if current_type and current_type.lower() in ('character varying', 'varchar', 'text'):
-            # Сначала заменяем нечисловые значения на '0'
             await conn.execute(text(
                 "UPDATE delivery_methods SET price = '0' WHERE price !~ '^[0-9]+(\\.[0-9]+)?$'"
             ))
@@ -84,7 +93,7 @@ async def update_v1():
             ))
             print("  + Изменен тип delivery_methods.price на NUMERIC")
         
-        # 7. Добавляем delivery_method_name в orders (если нет)
+        # 8. Добавляем delivery_method_name в orders (если нет)
         result = await conn.execute(text("""
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='orders' AND column_name='delivery_method_name'

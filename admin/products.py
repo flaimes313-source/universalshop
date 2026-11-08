@@ -3,6 +3,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from decimal import Decimal
+from aiogram.types import ReplyKeyboardRemove
 
 from admin.states import AddProductStates
 from admin.keyboards import (
@@ -11,6 +12,7 @@ from admin.keyboards import (
     get_categories_keyboard,
     get_confirm_keyboard
 )
+from admin.menu import get_admin_main_menu
 from database.models import Product, Category, ProductImage
 
 router = Router()
@@ -18,7 +20,6 @@ router = Router()
 # --- Шаг 1: Начало добавления товара ---
 @router.callback_query(F.data == "admin_products")
 async def start_add_product(callback: types.CallbackQuery, state: FSMContext):
-    """Начинает процесс добавления товара."""
     await callback.message.answer(
         "📝 <b>Добавление товара</b>\n\nШаг 1 из 8: Введите название товара:",
         reply_markup=get_cancel_keyboard()
@@ -31,7 +32,8 @@ async def start_add_product(callback: types.CallbackQuery, state: FSMContext):
 async def process_name(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Добавление товара отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Добавление товара отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     await state.update_data(name=message.text)
@@ -46,7 +48,8 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_description(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     description = None if message.text == "⏩ Пропустить" else message.text
@@ -62,7 +65,8 @@ async def process_description(message: types.Message, state: FSMContext):
 async def process_price(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     try:
@@ -83,7 +87,8 @@ async def process_price(message: types.Message, state: FSMContext):
 async def process_old_price(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     old_price = None
@@ -106,19 +111,19 @@ async def process_old_price(message: types.Message, state: FSMContext):
 async def process_photo(message: types.Message, state: FSMContext, session: AsyncSession):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     photo_id = None
     if message.photo:
-        photo_id = message.photo[-1].file_id  # Берем самое большое фото
+        photo_id = message.photo[-1].file_id
     elif message.text != "⏩ Пропустить":
         await message.answer("❌ Пожалуйста, отправьте фото или нажмите 'Пропустить'.")
         return
 
     await state.update_data(photo_id=photo_id)
     
-    # Получаем категории из БД
     result = await session.execute(select(Category).where(Category.is_active == True))
     categories = result.scalars().all()
     
@@ -162,7 +167,8 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
 async def process_stock(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("Отменено.", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("Панель управления:", reply_markup=get_admin_main_menu())
         return
     
     try:
@@ -173,7 +179,6 @@ async def process_stock(message: types.Message, state: FSMContext):
     
     await state.update_data(stock=stock)
     
-    # Показываем предпросмотр
     data = await state.get_data()
     preview = (
         f"<b>Предпросмотр товара:</b>\n\n"
@@ -196,7 +201,6 @@ async def process_stock(message: types.Message, state: FSMContext):
 async def save_product(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
     
-    # Создаем товар
     new_product = Product(
         name=data['name'],
         description=data['description'],
@@ -207,24 +211,32 @@ async def save_product(callback: types.CallbackQuery, state: FSMContext, session
         is_active=True
     )
     session.add(new_product)
-    await session.flush() # Получаем ID товара
+    await session.flush()
     
-    # Если есть фото, сохраняем его
     if data.get('photo_id'):
         new_image = ProductImage(
             product_id=new_product.id,
-            image_url="", # Пока оставим пустым, так как храним file_id
+            image_url="",
             telegram_file_id=data['photo_id']
         )
         session.add(new_image)
     
     await session.commit()
     
-    # Проверяем, было ли сообщение с фото, и выбираем правильный метод
     if callback.message.photo:
         await callback.message.edit_caption(caption="✅ Товар успешно добавлен в каталог!")
     else:
         await callback.message.edit_text("✅ Товар успешно добавлен в каталог!")
+    
+    # Убираем Reply-клавиатуру и показываем админ-меню
+    await callback.message.answer(
+        "Возвращаемся в админ-панель...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await callback.message.answer(
+        "<b>Панель управления</b>\n\nВыберите раздел:",
+        reply_markup=get_admin_main_menu()
+    )
     
     await state.clear()
     await callback.answer()
@@ -234,4 +246,12 @@ async def save_product(callback: types.CallbackQuery, state: FSMContext, session
 async def cancel_product(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Добавление товара отменено.")
+    await callback.message.answer(
+        "Возвращаемся в админ-панель...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await callback.message.answer(
+        "<b>Панель управления</b>\n\nВыберите раздел:",
+        reply_markup=get_admin_main_menu()
+    )
     await callback.answer()

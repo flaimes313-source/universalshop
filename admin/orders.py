@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from database.models import Order, OrderItem, User, PlatformAccount
+from database.models import Order, OrderItem, User, PlatformAccount, OrderHistory
 from admin.menu import get_admin_main_menu
 
 router = Router()
@@ -20,7 +20,6 @@ STATUS_NAMES = {
 }
 
 def get_admin_orders_keyboard(orders: list[Order]) -> types.InlineKeyboardMarkup:
-    """Клавиатура со списком заказов."""
     keyboard = []
     for order in orders:
         status_emoji = STATUS_NAMES.get(order.status, order.status).split()[0]
@@ -34,7 +33,6 @@ def get_admin_orders_keyboard(orders: list[Order]) -> types.InlineKeyboardMarkup
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def get_order_status_keyboard(order_id: int, current_status: str) -> types.InlineKeyboardMarkup:
-    """Клавиатура для смены статуса заказа."""
     keyboard = []
     for status_key, status_name in STATUS_NAMES.items():
         if status_key == current_status:
@@ -51,7 +49,6 @@ def get_order_status_keyboard(order_id: int, current_status: str) -> types.Inlin
 
 @router.callback_query(F.data == "admin_orders")
 async def admin_orders_list(callback: types.CallbackQuery, session: AsyncSession):
-    """Показывает список всех заказов."""
     result = await session.execute(
         select(Order).order_by(Order.created_at.desc()).limit(20)
     )
@@ -74,13 +71,11 @@ async def admin_orders_list(callback: types.CallbackQuery, session: AsyncSession
 
 @router.callback_query(F.data == "admin_orders_list")
 async def admin_orders_list_callback(callback: types.CallbackQuery, session: AsyncSession):
-    """Обработчик для кнопки 'Назад к списку'."""
     await admin_orders_list(callback, session)
 
 
 @router.callback_query(F.data.startswith("admin_order_view_"))
 async def admin_order_view(callback: types.CallbackQuery, session: AsyncSession):
-    """Показывает детали заказа."""
     order_id = int(callback.data.split("_")[3])
     result = await session.execute(
         select(Order).where(Order.id == order_id).options(selectinload(Order.items))
@@ -114,7 +109,6 @@ async def admin_order_view(callback: types.CallbackQuery, session: AsyncSession)
 
 @router.callback_query(F.data.startswith("admin_order_setstatus_"))
 async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSession):
-    """Меняет статус заказа и уведомляет покупателя."""
     parts = callback.data.split("_")
     order_id = int(parts[3])
     new_status = parts[4]
@@ -125,13 +119,22 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
         await callback.answer("Заказ не найден", show_alert=True)
         return
 
+    old_status = order.status
     order.status = new_status
+
+    # Записываем в историю
+    history = OrderHistory(
+        order_id=order.id,
+        old_status=old_status,
+        new_status=new_status,
+        changed_by=callback.from_user.id
+    )
+    session.add(history)
     await session.commit()
 
     # Уведомляем покупателя
     user_result = await session.execute(select(User).where(User.id == order.user_id))
     user = user_result.scalars().first()
-
     if user:
         acc_result = await session.execute(
             select(PlatformAccount).where(
@@ -151,13 +154,11 @@ async def admin_order_set_status(callback: types.CallbackQuery, session: AsyncSe
                 print(f"Не удалось уведомить покупателя: {e}")
 
     await callback.answer(f"Статус изменён на {STATUS_NAMES.get(new_status, new_status)}", show_alert=True)
-    
     await admin_orders_list(callback, session)
 
 
 @router.callback_query(F.data == "admin_back")
 async def admin_back(callback: types.CallbackQuery):
-    """Возврат в главное меню админа."""
     await callback.message.edit_text(
         "<b>Панель управления</b>\n\nВыберите раздел:",
         reply_markup=get_admin_main_menu()

@@ -5,7 +5,10 @@ from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
 from database.connection import async_session_maker
 from platforms.telegram.handlers import start, admin, catalog, cart, checkout, my_orders, timezone, support
-from admin import products, orders, categories, settings, statistics, delivery, customers, admin_manage, analytics, products_manage
+from admin import (
+    products, orders, categories, settings, statistics,
+    delivery, customers, admin_manage, analytics, products_manage
+)
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -24,11 +27,12 @@ async def start_bot():
     dp.message.middleware(DbSessionMiddleware())
     dp.callback_query.middleware(DbSessionMiddleware())
 
+    # Регистрируем роутеры (порядок важен)
     dp.include_router(start.router)
     dp.include_router(admin.router)
     dp.include_router(support.router)
     dp.include_router(products.router)
-    dp.include_router(products_manage.router)  # <-- Добавили
+    dp.include_router(products_manage.router)
     dp.include_router(orders.router)
     dp.include_router(categories.router)
     dp.include_router(settings.router)

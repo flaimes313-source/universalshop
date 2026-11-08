@@ -28,8 +28,13 @@ class CheckoutStates(StatesGroup):
 def get_delivery_keyboard(delivery_methods: list[DeliveryMethod]) -> InlineKeyboardMarkup:
     keyboard = []
     for method in delivery_methods:
+        label = f"{method.name}"
+        if method.price and method.price > 0:
+            label += f" — {method.price} ₽"
+        elif method.is_free:
+            label += " — Бесплатно"
         keyboard.append([InlineKeyboardButton(
-            text=f"{method.name} ({method.price})",
+            text=label,
             callback_data=f"delivery_{method.id}"
         )])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -56,7 +61,6 @@ async def start_checkout(callback: types.CallbackQuery, state: FSMContext, sessi
         await callback.answer("Корзина пуста!", show_alert=True)
         return
 
-    # Логируем начало оформления
     await log_event(session, callback.from_user.id, "checkout_start")
 
     await callback.message.answer(
@@ -117,32 +121,31 @@ async def process_delivery(callback: types.CallbackQuery, state: FSMContext, ses
         await callback.answer("Ошибка выбора доставки", show_alert=True)
         return
 
-    try:
-        price = Decimal(method.price.replace(",", "."))
-    except Exception:
-        price = Decimal("0")
+    # Цена теперь числовая
+    price = method.price if method.price else Decimal("0")
 
     await state.update_data(
         delivery_id=delivery_id,
         delivery_method_name=method.name,
-        delivery_amount=price
+        delivery_amount=price,
+        delivery_requires_address=method.requires_address  # запоминаем, нужен ли адрес
     )
     
     await log_event(session, callback.from_user.id, "checkout_step_delivery", {"delivery_id": delivery_id, "method_name": method.name})
 
-    if price == 0:
+    if method.requires_address:
+        await callback.message.answer(
+            "Шаг 4 из 5: Введите адрес доставки:",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        await state.set_state(CheckoutStates.waiting_for_address)
+    else:
         await state.update_data(delivery_address=None)
         await callback.message.answer(
             "Шаг 4 из 5: Введите комментарий к заказу (или нажмите 'Пропустить'):",
             reply_markup=get_skip_keyboard()
         )
         await state.set_state(CheckoutStates.waiting_for_comment)
-    else:
-        await callback.message.answer(
-            "Шаг 4 из 5: Введите адрес доставки:",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
-        await state.set_state(CheckoutStates.waiting_for_address)
 
     await callback.answer()
 
@@ -171,7 +174,7 @@ async def process_comment(message: types.Message, state: FSMContext, session: As
     items = await get_cart_items(session, message.from_user.id)
     total = await get_cart_total(session, message.from_user.id)
     delivery_amount = data.get('delivery_amount', Decimal("0"))
-    final_total = Decimal(total) + delivery_amount
+    final_total = total + delivery_amount  # total уже Decimal
 
     text = (
         f"<b>Проверьте ваш заказ:</b>\n\n"
@@ -196,6 +199,12 @@ async def process_comment(message: types.Message, state: FSMContext, session: As
 @router.callback_query(CheckoutStates.waiting_for_confirm, F.data == "order_confirm")
 async def confirm_order(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
+
+    # Защита от повторного нажатия: проверяем, есть ли уже заказ в этом состоянии
+    if data.get("order_created"):
+        await callback.answer("Заказ уже создан.", show_alert=True)
+        return
+    await state.update_data(order_created=True)
 
     try:
         order = await create_order(

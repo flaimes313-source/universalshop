@@ -5,14 +5,12 @@ from sqlalchemy import delete
 from config import LICENSE_KEY, ALLOWED_LICENSE_KEYS
 from database.connection import async_session_maker
 from database.models import UserEvent
+from database.init_db import init_db
 from platforms.telegram.bot import start_bot
 
 
 async def cleanup_old_events(days: int = 30):
-    """
-    Фоновая задача: раз в сутки удаляет события старше N дней.
-    По умолчанию 30 дней.
-    """
+    """Фоновая задача: раз в сутки удаляет события старше N дней."""
     while True:
         await asyncio.sleep(86400)  # Ждём 24 часа
         cutoff = datetime.utcnow() - timedelta(days=days)
@@ -23,13 +21,15 @@ async def cleanup_old_events(days: int = 30):
 
 
 async def main():
-    """Точка входа с проверкой лицензии и запуском фоновой задачи."""
-    # Проверка лицензии перед запуском
+    """Точка входа с проверкой лицензии, инициализацией БД и запуском фоновой задачи."""
     if LICENSE_KEY not in ALLOWED_LICENSE_KEYS:
         print("❌ Ошибка: неверный лицензионный ключ. Бот не запущен.")
         return
 
-    # Запускаем фоновую задачу очистки (она будет работать параллельно с ботом)
+    # Инициализация БД (создание таблиц и базовых настроек, если их нет)
+    await init_db()
+
+    # Запускаем фоновую задачу очистки
     asyncio.create_task(cleanup_old_events(30))
 
     # Запускаем бота

@@ -1,44 +1,54 @@
 import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from database.connection import engine, async_session_maker
 from database.models import Base, ShopSetting, MenuItem
 
 async def init_db():
     """Создает таблицы и заполняет базовые настройки при первом запуске."""
-    print("⏳ Создание таблиц в базе данных...")
+    print("⏳ Проверка и создание таблиц в базе данных...")
     
     # Создаем все таблицы, которых еще нет
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    print("✅ Таблицы созданы.")
+    print("✅ Таблицы созданы (или уже существовали).")
 
-    # Проверяем, есть ли базовые настройки, и если нет — создаем их
+    # Проверяем и добавляем базовые настройки
     async with async_session_maker() as session:
-        # Проверка на наличие настроек
-        from sqlalchemy import select
-        result = await session.execute(select(ShopSetting).limit(1))
-        if not result.scalars().first():
-            print("⚙️ Заполнение базовых настроек...")
-            default_settings = [
-                ShopSetting(key="shop_name", value="Мой Универсальный Магазин"),
-                ShopSetting(key="welcome_text", value="Рады видеть вас в нашем магазине!"),
-                ShopSetting(key="contacts_text", value="Свяжитесь с нами: @manager"),
-                ShopSetting(key="currency", value="RUB")
-            ]
-            session.add_all(default_settings)
-            
-            # Создаем базовое меню
-            default_menu = [
-                MenuItem(title="Каталог", action_type="catalog", sort_order=1),
-                MenuItem(title="Корзина", action_type="cart", sort_order=2),
-                MenuItem(title="Мои заказы", action_type="orders", sort_order=3),
-                MenuItem(title="Контакты", action_type="contacts", sort_order=4),
-            ]
-            session.add_all(default_menu)
-            
-            await session.commit()
-            print("✅ Настройки и меню по умолчанию добавлены.")
+        # 1. Настройки
+        default_settings = [
+            ("shop_name", "Мой Универсальный Магазин"),
+            ("welcome_text", "Рады видеть вас в нашем магазине!"),
+            ("contacts_text", "Свяжитесь с нами: @manager"),
+            ("currency", "RUB"),
+            ("payment_manual_enabled", "0"),
+            ("payment_manual_details", "Реквизиты не указаны."),
+            ("support_enabled", "1"),
+            ("support_text", "Напишите ваш вопрос, и мы ответим вам в ближайшее время."),
+        ]
+        
+        for key, value in default_settings:
+            result = await session.execute(select(ShopSetting).where(ShopSetting.key == key))
+            if not result.scalars().first():
+                session.add(ShopSetting(key=key, value=value))
+                print(f"  + Добавлена настройка: {key}")
+
+        # 2. Меню
+        default_menu = [
+            ("Каталог", "catalog", 1),
+            ("Корзина", "cart", 2),
+            ("Мои заказы", "orders", 3),
+            ("Контакты", "contacts", 4),
+        ]
+        
+        for title, action, order in default_menu:
+            result = await session.execute(select(MenuItem).where(MenuItem.title == title))
+            if not result.scalars().first():
+                session.add(MenuItem(title=title, action_type=action, sort_order=order))
+                print(f"  + Добавлена кнопка меню: {title}")
+
+        await session.commit()
+        print("✅ Базовые настройки и меню проверены/добавлены.")
 
 if __name__ == "__main__":
     asyncio.run(init_db())

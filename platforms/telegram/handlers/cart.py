@@ -18,7 +18,6 @@ async def show_cart(message: types.Message, session: AsyncSession):
     
     total = await get_cart_total(session, message.from_user.id)
     
-    # Формируем текст сообщения
     text = "🛒 <b>Ваша корзина:</b>\n\n"
     for item in items:
         if item.product:
@@ -29,13 +28,14 @@ async def show_cart(message: types.Message, session: AsyncSession):
     
     await message.answer(text, reply_markup=get_cart_keyboard(items))
 
-# --- Обработчики кнопок корзины (Callback) ---
-
 @router.callback_query(F.data.startswith("cart_plus_"))
 async def cart_plus(callback: types.CallbackQuery, session: AsyncSession):
     item_id = int(callback.data.split("_")[2])
-    await update_quantity(session, item_id, 1)
-    # Обновляем сообщение
+    try:
+        await update_quantity(session, callback.from_user.id, item_id, 1)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     items = await get_cart_items(session, callback.from_user.id)
     if items:
         total = await get_cart_total(session, callback.from_user.id)
@@ -53,7 +53,11 @@ async def cart_plus(callback: types.CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data.startswith("cart_minus_"))
 async def cart_minus(callback: types.CallbackQuery, session: AsyncSession):
     item_id = int(callback.data.split("_")[2])
-    await update_quantity(session, item_id, -1)
+    try:
+        await update_quantity(session, callback.from_user.id, item_id, -1)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     items = await get_cart_items(session, callback.from_user.id)
     if items:
         total = await get_cart_total(session, callback.from_user.id)
@@ -71,7 +75,11 @@ async def cart_minus(callback: types.CallbackQuery, session: AsyncSession):
 @router.callback_query(F.data.startswith("cart_del_"))
 async def cart_del(callback: types.CallbackQuery, session: AsyncSession):
     item_id = int(callback.data.split("_")[2])
-    await remove_item(session, item_id)
+    try:
+        await remove_item(session, callback.from_user.id, item_id)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
     items = await get_cart_items(session, callback.from_user.id)
     if items:
         total = await get_cart_total(session, callback.from_user.id)

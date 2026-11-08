@@ -71,7 +71,7 @@ async def view_product(callback: types.CallbackQuery, session: AsyncSession):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔄 Скрыть/Показать", callback_data=f"admin_prod_toggle_{product.id}")],
         [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin_prod_edit_{product.id}")],
-        [InlineKeyboardButton(text="📁 Сменить категорию", callback_data=f"admin_prod_changecat_{product.id}")],  # <-- Новая кнопка
+        [InlineKeyboardButton(text="📁 Сменить категорию", callback_data=f"admin_prod_changecat_{product.id}")],
         [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"admin_prod_delete_{product.id}")],
         [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="admin_products_manage")]
     ])
@@ -146,14 +146,12 @@ async def change_category_start(callback: types.CallbackQuery, state: FSMContext
     """Быстрая смена категории товара."""
     product_id = int(callback.data.split("_")[3])
     
-    # Получаем товар для проверки
     result = await session.execute(select(Product).where(Product.id == product_id))
     product = result.scalars().first()
     if not product:
         await callback.answer("Товар не найден", show_alert=True)
         return
     
-    # Получаем все активные категории
     cat_result = await session.execute(select(Category).where(Category.is_active == True))
     categories = cat_result.scalars().all()
 
@@ -161,20 +159,27 @@ async def change_category_start(callback: types.CallbackQuery, state: FSMContext
         await callback.answer("Нет доступных категорий.", show_alert=True)
         return
 
-    # Сохраняем ID товара в состоянии
     await state.update_data(quick_cat_product_id=product_id)
     
-    # Показываем список категорий
     keyboard = []
     for cat in categories:
         keyboard.append([InlineKeyboardButton(text=cat.name, callback_data=f"quick_cat_choose_{cat.id}")])
     keyboard.append([InlineKeyboardButton(text="Без категории", callback_data="quick_cat_choose_none")])
     keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"admin_prod_view_{product_id}")])
 
-    await callback.message.edit_text(
-        f"📁 <b>Смена категории для товара:</b> {product.name}\n\nВыберите новую категорию:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
+    text = f"📁 <b>Смена категории для товара:</b> {product.name}\n\nВыберите новую категорию:"
+    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    # Проверяем, можно ли редактировать сообщение (если это фото — edit_text упадёт)
+    if callback.message.text:
+        await callback.message.edit_text(text, reply_markup=markup)
+    else:
+        await callback.message.answer(text, reply_markup=markup)
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+
     await state.set_state(EditProductStates.waiting_for_quick_category)
     await callback.answer()
 
@@ -205,7 +210,6 @@ async def change_category_choose(callback: types.CallbackQuery, state: FSMContex
         await callback.answer("✅ Категория изменена", show_alert=True)
         
         # Возвращаемся к карточке товара
-        # Создаем фейковый callback для view_product
         class FakeCallback:
             def __init__(self, original):
                 self.message = original.message
@@ -264,7 +268,6 @@ async def edit_product_stock(message: types.Message, state: FSMContext, session:
     else:
         await state.update_data(edit_stock=None)
 
-    # Спрашиваем, хочет ли пользователь изменить категорию
     await message.answer(
         "Хотите изменить категорию товара?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[

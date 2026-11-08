@@ -7,6 +7,9 @@ from decimal import Decimal
 
 from admin.states import EditProductStates
 from database.models import Product, ProductImage, CartItem, OrderItem, Category
+from services.settings import get_setting, get_menu_items
+from platforms.telegram.keyboards import get_main_menu_keyboard
+from config import ADMIN_ID
 
 router = Router()
 
@@ -20,7 +23,7 @@ async def list_products(callback: types.CallbackQuery, session: AsyncSession):
     if not products:
         text = "📦 Товаров пока нет."
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")]
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")]
         ])
     else:
         keyboard = []
@@ -32,7 +35,7 @@ async def list_products(callback: types.CallbackQuery, session: AsyncSession):
                     callback_data=f"admin_prod_view_{p.id}"
                 )
             ])
-        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_products")])
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="admin_back")])
         text = "📦 <b>Управление товарами</b>\n\nВыберите товар:"
 
     if callback.message.text:
@@ -208,7 +211,6 @@ async def change_category_choose(callback: types.CallbackQuery, state: FSMContex
         await session.commit()
         await callback.answer("✅ Категория изменена", show_alert=True)
         
-        # Возвращаемся к карточке товара (создаем "фейковый" callback с нужными методами)
         class FakeCallback:
             def __init__(self, original):
                 self.message = original.message
@@ -338,5 +340,15 @@ async def finish_edit(message: types.Message, state: FSMContext, session: AsyncS
         await message.answer("✅ Товар обновлен.")
     else:
         await message.answer("❌ Товар не найден.")
+
+    # Возвращаем в главное меню (с Reply-клавиатурой)
+    welcome_text = await get_setting(session, "welcome_text", "Добро пожаловать!")
+    shop_name = await get_setting(session, "shop_name", "Наш магазин")
+    menu_items = await get_menu_items(session)
+    is_admin = (message.from_user.id == ADMIN_ID)
+    keyboard = get_main_menu_keyboard(menu_items, is_admin)
+    
+    text = f"<b>{shop_name}</b>\n\n{welcome_text}"
+    await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
     await state.clear()
